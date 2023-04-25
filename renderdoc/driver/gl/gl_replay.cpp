@@ -1392,6 +1392,7 @@ void GLReplay::SavePipelineState(uint32_t eventId)
           case TextureType::Texture3D: target = eGL_TEXTURE_3D; break;
           case TextureType::TextureCube: target = eGL_TEXTURE_CUBE_MAP; break;
           case TextureType::TextureCubeArray: target = eGL_TEXTURE_CUBE_MAP_ARRAY; break;
+          case TextureType::TextureExternal: target = eGL_TEXTURE_EXTERNAL_OES; break;
           case TextureType::Count: RDCERR("Invalid shader resource type"); break;
         }
 
@@ -3800,6 +3801,7 @@ ResourceId GLReplay::CreateProxyTexture(const TextureDescription &templateTex)
     case TextureType::Texture3D: target = eGL_TEXTURE_3D; break;
     case TextureType::TextureCube: target = eGL_TEXTURE_CUBE_MAP; break;
     case TextureType::TextureCubeArray: target = eGL_TEXTURE_CUBE_MAP_ARRAY; break;
+    case TextureType::TextureExternal: target = eGL_TEXTURE_EXTERNAL_OES; break;
     case TextureType::Count: RDCERR("Invalid texture dimension"); break;
   }
 
@@ -4214,6 +4216,7 @@ bool GLReplay::IsTextureSupported(const TextureDescription &tex)
     case TextureType::Texture3D: target = eGL_TEXTURE_3D; break;
     case TextureType::TextureCube: target = eGL_TEXTURE_CUBE_MAP; break;
     case TextureType::TextureCubeArray: target = eGL_TEXTURE_CUBE_MAP_ARRAY; break;
+    case TextureType::TextureExternal: target = eGL_TEXTURE_EXTERNAL_OES; break;
     case TextureType::Count: RDCERR("Invalid texture dimension"); break;
   }
 
