@@ -413,7 +413,8 @@
   HookInit(CmdBeginRenderPass);               \
   HookInit(CmdNextSubpass);                   \
   HookInit(CmdExecuteCommands);               \
-  HookInit(CmdEndRenderPass);
+  HookInit(CmdEndRenderPass);                 \
+  HookInit(BindImageMemory2);
 
 // We can always build in VK_KHR_display and VK_KHR_display_swapchain support
 // because they don't need any libraries or headers.
