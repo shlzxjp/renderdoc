@@ -694,6 +694,7 @@ public:
   void RegisterReplayContext(GLWindowingData winData, void *shareContext, bool core,
                              bool attribsCreate);
   void UnregisterReplayContext(GLWindowingData winData);
+  void DeleteBuffers(GLsizei n, const GLuint *buffers);
   void DeleteContext(void *contextHandle);
   GLInitParams &GetInitParams(GLWindowingData winData)
   {
