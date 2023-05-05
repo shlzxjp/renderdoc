@@ -272,13 +272,13 @@ bool WrappedVulkan::CheckMemoryRequirements(const char *resourceName, ResourceId
       size = origMrq.size;
     }
 
-    SET_ERROR_RESULT(m_FailedReplayResult, ResultCode::APIHardwareUnsupported,
-                     "Trying to bind %s to %s, but at memory offset 0x%llx the reported size of "
-                     "0x%llx won't fit the 0x%llx bytes of memory.\n"
-                     "\n%s",
-                     resourceName, GetResourceDesc(memOrigId).name.c_str(), memoryOffset, size,
-                     memInfo.allocSize, GetPhysDeviceCompatString(external, origInvalid).c_str());
-    return false;
+//    SET_ERROR_RESULT(m_FailedReplayResult, ResultCode::APIHardwareUnsupported,
+//                     "Trying to bind %s to %s, but at memory offset 0x%llx the reported size of "
+//                     "0x%llx won't fit the 0x%llx bytes of memory.\n"
+//                     "\n%s",
+//                     resourceName, GetResourceDesc(memOrigId).name.c_str(), memoryOffset, size,
+//                     memInfo.allocSize, GetPhysDeviceCompatString(external, origInvalid).c_str());
+//    return false;
   }
 
   return true;
