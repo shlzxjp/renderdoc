@@ -1097,6 +1097,42 @@ WrappedOpenGL::ContextData &WrappedOpenGL::GetCtxData()
 ////////////////////////////////////////////////////////////////
 // Windowing/setup/etc
 ////////////////////////////////////////////////////////////////
+void WrappedOpenGL::DeleteBuffers(GLsizei n, const GLuint *buffers)
+{
+  for(GLsizei i = 0; i < n; i++)
+  {
+    GLResource res = BufferRes(GetCtx(), buffers[i]);
+    if(GetResourceManager()->HasCurrentResource(res))
+    {
+      GLResourceRecord *record = GetResourceManager()->GetResourceRecord(res);
+      if(record)
+      {
+        // if we have a persistent pointer, make sure to unmap it
+        {
+          m_PersistentMaps.erase(record);
+          if(record->Map.access & GL_MAP_COHERENT_BIT)
+            m_CoherentMaps.erase(record);
+        }
+
+        // free any shadow storage
+        record->FreeShadowStorage();
+
+        for(auto cd = m_ContextData.begin(); cd != m_ContextData.end(); ++cd)
+        {
+          for(size_t r = 0; r < ARRAY_COUNT(cd->second.m_BufferRecord); r++)
+          {
+            if(cd->second.m_BufferRecord[r] == record)
+              cd->second.m_BufferRecord[r] = NULL;
+          }
+        }
+      }
+
+      if(GetResourceManager()->HasResourceRecord(res))
+        GetResourceManager()->GetResourceRecord(res)->Delete(GetResourceManager());
+      GetResourceManager()->UnregisterResource(res);
+    }
+  }
+}
 
 void WrappedOpenGL::DeleteContext(void *contextHandle)
 {
@@ -1130,21 +1166,23 @@ void WrappedOpenGL::DeleteContext(void *contextHandle)
     delete ctxdata.shareGroup;
   }
 
-  if(ctxdata.built && ctxdata.ready)
-  {
-    ctxdata.ArrayMS.Destroy();
-    if(ctxdata.Program)
-      GL.glDeleteProgram(ctxdata.Program);
-    if(ctxdata.ArrayBuffer)
-      GL.glDeleteBuffers(1, &ctxdata.ArrayBuffer);
-    if(ctxdata.GlyphTexture)
-      GL.glDeleteTextures(1, &ctxdata.GlyphTexture);
-  }
+  // Without an OpenGL context, calling glDeleteBuffer may cause a crash，especially on Galaxy S9 devices.
+//  if(ctxdata.built && ctxdata.ready)
+//  {
+//    ctxdata.ArrayMS.Destroy();
+//    if(ctxdata.Program)
+//      GL.glDeleteProgram(ctxdata.Program);
+//    if(ctxdata.ArrayBuffer)
+//      GL.glDeleteBuffers(1, &ctxdata.ArrayBuffer);
+//    if(ctxdata.GlyphTexture)
+//      GL.glDeleteTextures(1, &ctxdata.GlyphTexture);
+//  }
 
+  // Without an OpenGL context, calling glDeleteBuffer may cause a crash.
   if(ctxdata.m_ClientMemoryVBOs[0])
-    glDeleteBuffers(ARRAY_COUNT(ctxdata.m_ClientMemoryVBOs), ctxdata.m_ClientMemoryVBOs);
+    DeleteBuffers(ARRAY_COUNT(ctxdata.m_ClientMemoryVBOs), ctxdata.m_ClientMemoryVBOs);
   if(ctxdata.m_ClientMemoryIBO)
-    glDeleteBuffers(1, &ctxdata.m_ClientMemoryIBO);
+    DeleteBuffers(1, &ctxdata.m_ClientMemoryIBO);
 
   if(ctxdata.m_ContextDataRecord)
   {
@@ -2231,7 +2269,7 @@ void WrappedOpenGL::StartFrameCapture(DeviceOwnedWindow devWnd)
   if(!IsBackgroundCapturing(m_State))
     return;
 
-  RDCLOG("Starting capture");
+  RDCLOG("Starting OpenGL capture");
 
   m_CaptureTimer.Restart();
 
@@ -4853,9 +4891,6 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glGetQueryBufferObjectuiv:
       return Serialise_glGetQueryBufferObjectuiv(ser, 0, 0, eGL_NONE, 0);
 
-    case GLChunk::glEGLImageTargetTexture2DOES:
-      return Serialise_glEGLImageTargetTexture2DOES(ser, eGL_NONE, NULL);
-
     // these functions are not currently serialised - they do nothing on replay and are not
     // serialised for information (it would be harmless and perhaps useful for the user to see
     // where and how they're called).
@@ -5168,6 +5203,7 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glGetPerfQueryIdByNameINTEL:
     case GLChunk::glGetPerfQueryInfoINTEL:
 
+    case GLChunk::glEGLImageTargetTexture2DOES:
     case GLChunk::Max:
       RDCERR("Unexpected chunk %s, or missing case for processing! Skipping...",
              ToStr(chunk).c_str());
