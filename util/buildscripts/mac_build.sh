@@ -1,5 +1,5 @@
 #!/bin/bash
-NDK_PATH=/Users/fanjie/Library/Android/sdk/ndk/16.1.4479499 # 必须要16的NDK，否则会报错
+# NDK_PATH=/Users/fanjie/Library/Android/sdk/ndk/16.1.4479499 # 必须要16的NDK，否则会报错
 # ANDROID_HOME=/Users/fanjie/Library/Android/sdk
 # ANDROID_SDK=/Users/fanjie/Library/Android/sdk
 
@@ -18,4 +18,5 @@ if [ ! -d "support/llvm_arm32" ] || [ ! -d "support/llvm_arm64" ]; then
   cd ..
 fi
 
+brew install create-dmg
 ./build.sh --snapshot libpag

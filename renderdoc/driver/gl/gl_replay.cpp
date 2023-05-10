@@ -555,6 +555,7 @@ void GLReplay::CacheTexture(ResourceId id)
     case eGL_TEXTURE_2D_MULTISAMPLE_ARRAY: tex.type = TextureType::Texture2DMSArray; break;
     case eGL_TEXTURE_CUBE_MAP: tex.type = TextureType::TextureCube; break;
     case eGL_TEXTURE_CUBE_MAP_ARRAY: tex.type = TextureType::TextureCubeArray; break;
+    case eGL_TEXTURE_EXTERNAL_OES: tex.type = TextureType::TextureExternal; break;
 
     default:
       tex.type = TextureType::Unknown;
@@ -1226,6 +1227,7 @@ void GLReplay::SavePipelineState(uint32_t eventId)
         case TextureType::Texture3D: descType = GLDescriptorMapping::Tex3D; break;
         case TextureType::TextureCube: descType = GLDescriptorMapping::TexCube; break;
         case TextureType::TextureCubeArray: descType = GLDescriptorMapping::TexCubeArray; break;
+        case TextureType::TextureExternal: descType = GLDescriptorMapping::TexExternal; break;
         case TextureType::Unknown:
         case TextureType::Count:
           RDCERR("Invalid resource type on binding %s", refl->readOnlyResources[i].name.c_str());
@@ -1266,6 +1268,7 @@ void GLReplay::SavePipelineState(uint32_t eventId)
         case TextureType::Texture3D: binding = eGL_TEXTURE_BINDING_3D; break;
         case TextureType::TextureCube: binding = eGL_TEXTURE_BINDING_CUBE_MAP; break;
         case TextureType::TextureCubeArray: binding = eGL_TEXTURE_BINDING_CUBE_MAP_ARRAY; break;
+        case TextureType::TextureExternal: binding = eGL_TEXTURE_BINDING_EXTERNAL_OES; break;
         case TextureType::Count: RDCERR("Invalid shader resource type"); break;
       }
 
@@ -2186,6 +2189,10 @@ rdcarray<Descriptor> GLReplay::GetDescriptors(ResourceId descriptorStore,
               if(!HasExt[ARB_texture_multisample])
                 continue;
               break;
+            case GLDescriptorMapping::TexExternal:
+              target = eGL_TEXTURE_EXTERNAL_OES;
+              ret[dst].textureType = TextureType::TextureExternal;
+              break;
             case GLDescriptorMapping::AtomicCounter:
             case GLDescriptorMapping::ShaderStorage:
             case GLDescriptorMapping::BareUniforms:
@@ -2361,6 +2368,9 @@ rdcarray<SamplerDescriptor> GLReplay::GetSamplerDescriptors(ResourceId descripto
 
             if(!HasExt[ARB_texture_multisample])
               continue;
+            break;
+          case GLDescriptorMapping::TexExternal:
+            target = eGL_TEXTURE_EXTERNAL_OES;
             break;
           case GLDescriptorMapping::AtomicCounter:
           case GLDescriptorMapping::ShaderStorage:
@@ -2586,6 +2596,10 @@ rdcarray<DescriptorLogicalLocation> GLReplay::GetDescriptorLocations(
           break;
         case GLDescriptorMapping::Tex2DMSArray:
           prefix = "Tex2DMSArray";
+          dstLoc.category = DescriptorCategory::ReadOnlyResource;
+          break;
+        case GLDescriptorMapping::TexExternal:
+          prefix = "TexExternal";
           dstLoc.category = DescriptorCategory::ReadOnlyResource;
           break;
         case GLDescriptorMapping::Images:
