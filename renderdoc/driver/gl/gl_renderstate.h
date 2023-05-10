@@ -82,7 +82,8 @@ enum class GLDescriptorMapping : uint32_t
   TexCube = TexBuffer + 128,
   Tex2DMS = TexCube + 128,
   Tex2DMSArray = Tex2DMS + 128,
-  Images = Tex2DMSArray + 128,
+  TexExternal = Tex2DMSArray + 128,
+  Images = TexExternal + 128,
   AtomicCounter = Images + 8,
   ShaderStorage = AtomicCounter + 8,
   UniformBinding = ShaderStorage + 96,
@@ -113,6 +114,7 @@ inline GLDescriptorLocation DecodeGLDescriptorIndex(uint32_t idx)
   HANDLE_TYPE(ShaderStorage);
   HANDLE_TYPE(AtomicCounter);
   HANDLE_TYPE(Images);
+  HANDLE_TYPE(TexExternal);
   HANDLE_TYPE(Tex2DMSArray);
   HANDLE_TYPE(Tex2DMS);
   HANDLE_TYPE(TexCube);
