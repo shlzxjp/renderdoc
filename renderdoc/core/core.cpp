@@ -1008,6 +1008,14 @@ bool RenderDoc::ShowReplayUI()
   return true;
 }
 
+void RenderDoc::RemoteTriggerCapture(uint32_t numFrames)
+{
+  // Use atomic exchange to set the remote capture request.
+  // This will be processed in Tick() on the render thread,
+  // ensuring the capture happens in the same context as hotkey-triggered captures.
+  Atomic::ExchAdd64((int64_t *)&m_RemoteTriggerCapture, (int64_t)numFrames);
+}
+
 void RenderDoc::Tick()
 {
   bool cur_focus = false;
@@ -1027,6 +1035,16 @@ void RenderDoc::Tick()
   if(!m_PrevCap && cur_cap)
   {
     TriggerCapture(1);
+  }
+
+  // Process remote capture requests from TargetControlClientThread
+  // This ensures remote-triggered captures happen in the same thread context as hotkey captures
+  int32_t remoteCap = Atomic::CmpExch32(&m_RemoteTriggerCapture, 0, 0);
+  if(remoteCap > 0)
+  {
+    // Atomically reset and get the value
+    Atomic::CmpExch32(&m_RemoteTriggerCapture, remoteCap, 0);
+    TriggerCapture((uint32_t)remoteCap);
   }
 
   m_PrevFocus = cur_focus;
