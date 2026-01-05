@@ -355,7 +355,12 @@ void RenderDoc::TargetControlClientThread(uint32_t version, Network::Socket *cli
         READ_DATA_SCOPE();
         SERIALISE_ELEMENT(numFrames);
 
-        RenderDoc::Inst().TriggerCapture(numFrames);
+        // Use RemoteTriggerCapture instead of TriggerCapture directly.
+        // This ensures the capture request is processed in Tick() on the render thread,
+        // matching the behavior of hotkey-triggered captures (F12/PrtScrn).
+        // This avoids potential issues with captures being triggered from a different
+        // thread context which could cause problems with some applications.
+        RenderDoc::Inst().RemoteTriggerCapture(numFrames);
       }
       else if(type == ePacket_QueueCapture)
       {
