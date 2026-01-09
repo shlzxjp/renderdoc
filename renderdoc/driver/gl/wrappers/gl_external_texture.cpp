@@ -28,6 +28,10 @@
 #endif
 #include "../gl_driver.h"
 
+#if defined(RENDERDOC_PLATFORM_ANDROID)
+#include <android/hardware_buffer.h>
+#endif
+
 rdcarray<byte> WrappedOpenGL::GetExternalTextureData(GLuint texture)
 {
   rdcarray<byte> pixels;

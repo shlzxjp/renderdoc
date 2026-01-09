@@ -1408,7 +1408,7 @@ void MakeShaderReflection(GLenum shadType, GLuint sepProg, ShaderReflection &ref
     }
     else if(values[0] == eGL_SAMPLER_EXTERNAL_OES)
     {
-      res.resType = TextureType::TextureExternal;
+      res.textureType = TextureType::TextureExternal;
       res.variableType.name = "samplerExternalOES";
       res.variableType.baseType = VarType::Float;
     }

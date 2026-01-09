@@ -191,6 +191,21 @@ static void StripUnwantedExtensions(rdcarray<rdcstr> &Extensions)
       return true;
     }
 
+    // remove Android-specific extensions for cross-platform replay (Android -> Windows/Linux/Mac)
+    if(ext == "VK_ANDROID_external_memory_android_hardware_buffer" ||
+       ext == "VK_ANDROID_external_format_resolve" ||
+       ext == "VK_EXT_queue_family_foreign")
+    {
+      return true;
+    }
+
+    // remove vendor-specific extensions that may not be available on replay device
+    // (e.g., Qualcomm extensions when replaying Android capture on NVIDIA GPU)
+    if(ext.contains("QCOM") || ext.contains("ADRENO"))
+    {
+      return true;
+    }
+
     // remove WSI-only extensions
     if(ext == "VK_GOOGLE_display_timing" || ext == "VK_KHR_display_swapchain" ||
        ext == "VK_EXT_display_control" || ext == "VK_KHR_present_id" ||

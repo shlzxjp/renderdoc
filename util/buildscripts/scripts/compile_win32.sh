@@ -39,27 +39,34 @@ if [ ! -f ./Documentation/htmlhelp/renderdoc.chm ]; then
 fi
 
 # Transform ANDROID_SDK / ANDROID_NDK to native paths if needed
-if echo "${ANDROID_SDK}" | grep -q :; then
-	NATIVE_ANDROID_SDK_PATH=$(echo "${ANDROID_SDK}" | sed -e '{s#^\(.\):[/\]#\1/#g}' | tr '\\' '/')
-	# Add on wherever windows drives are
-	ANDROID_SDK="${WIN_ROOT}${NATIVE_ANDROID_SDK_PATH}"
-
+# 检查是否是 Windows 路径格式 (C:\path 或 /c/path)
+if echo "${ANDROID_SDK}" | grep -q "^/c/"; then
+	# 已经是 MSYS2 格式，保持不变
+	echo "ANDROID_SDK already in MSYS2 format: ${ANDROID_SDK}"
+elif echo "${ANDROID_SDK}" | grep -q "^[A-Za-z]:"; then
+	# Windows 格式，转换为 MSYS2 格式
+	ANDROID_SDK=$(echo "${ANDROID_SDK}" | sed -e 's#^\([A-Za-z]\):#/\L\1#' | tr '\\' '/')
+	echo "Converted ANDROID_SDK to MSYS2 format: ${ANDROID_SDK}"
 	export ANDROID_SDK
 fi
 
-if echo "${ANDROID_NDK}" | grep -q :; then
-	NATIVE_ANDROID_NDK_PATH=$(echo "${ANDROID_NDK}" | sed -e '{s#^\(.\):[/\]#\1/#g}' | tr '\\' '/')
-	# Add on wherever windows drives are
-	ANDROID_NDK="${WIN_ROOT}${NATIVE_ANDROID_NDK_PATH}"
-
+if echo "${ANDROID_NDK}" | grep -q "^/c/"; then
+	# 已经是 MSYS2 格式，保持不变
+	echo "ANDROID_NDK already in MSYS2 format: ${ANDROID_NDK}"
+elif echo "${ANDROID_NDK}" | grep -q "^[A-Za-z]:"; then
+	# Windows 格式，转换为 MSYS2 格式
+	ANDROID_NDK=$(echo "${ANDROID_NDK}" | sed -e 's#^\([A-Za-z]\):#/\L\1#' | tr '\\' '/')
+	echo "Converted ANDROID_NDK to MSYS2 format: ${ANDROID_NDK}"
 	export ANDROID_NDK
 fi
 
-export PATH=$PATH:"${ANDROID_SDK}/tools"
+export PATH=$PATH:"${ANDROID_SDK}/platform-tools":"${ANDROID_SDK}/tools":"${ANDROID_SDK}/tools/bin"
 
 # Check that we're set up to build for android
-if [ ! -d "${ANDROID_SDK}"/tools ] ; then
+# 检查 platform-tools 或 tools 目录是否存在
+if [ ! -d "${ANDROID_SDK}/platform-tools" ] && [ ! -d "${ANDROID_SDK}/tools" ] ; then
 	echo "\$ANDROID_SDK is not correctly configured: '$ANDROID_SDK'"
+	echo "Expected to find platform-tools or tools directory"
 
 	if [[ "$STRICT" == "yes" ]]; then
 		echo "Strict mode: Fail to build Android.";
@@ -94,14 +101,19 @@ fi
 
 if [ ! -d $LLVM_ARM32 ] || [ ! -d $LLVM_ARM64 ] ; then
 	echo "llvm is not available, expected $LLVM_ARM32 and $LLVM_ARM64 respectively."
+	echo "Building Android APK without interceptor-lib (using PLT-interception method)"
+	USE_INTERCEPTOR_LIB=Off
+	LLVM_CMAKE_ARGS=""
 
 	if [[ "$STRICT" == "yes" ]]; then
-		echo "Strict mode: Fail to build Android.";
+		echo "Strict mode: Fail to build Android without LLVM.";
 		exit 1;
 	fi
-
-	# Don't return an error code, consider android errors non-fatal
-	exit 0;
+else
+	echo "LLVM found, building with interceptor-lib support"
+	USE_INTERCEPTOR_LIB=On
+	LLVM_CMAKE_ARGS_ARM32="-DLLVM_DIR=$LLVM_ARM32/lib/cmake/llvm"
+	LLVM_CMAKE_ARGS_ARM64="-DLLVM_DIR=$LLVM_ARM64/lib/cmake/llvm"
 fi
 
 GENERATOR="Unix Makefiles"
@@ -129,7 +141,11 @@ else
 	mkdir -p build-android-arm32
 	pushd build-android-arm32
 
-	cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=armeabi-v7a -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DLLVM_DIR=$LLVM_ARM32/lib/cmake/llvm -DUSE_INTERCEPTOR_LIB=On ..
+	if [ "$USE_INTERCEPTOR_LIB" == "On" ]; then
+		cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=armeabi-v7a -DANDROID_NATIVE_API_LEVEL=26 -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On $LLVM_CMAKE_ARGS_ARM32 -DUSE_INTERCEPTOR_LIB=On ..
+	else
+		cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=armeabi-v7a -DANDROID_NATIVE_API_LEVEL=26 -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DUSE_INTERCEPTOR_LIB=Off ..
+	fi
 	make -j$(nproc)
 
 	if ! ls bin/*.apk; then
@@ -157,7 +173,11 @@ else
 	mkdir -p build-android-arm64
 	pushd build-android-arm64
 
-	cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=arm64-v8a -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DLLVM_DIR=$LLVM_ARM64/lib/cmake/llvm -DUSE_INTERCEPTOR_LIB=On ..
+	if [ "$USE_INTERCEPTOR_LIB" == "On" ]; then
+		cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=arm64-v8a -DANDROID_NATIVE_API_LEVEL=26 -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On $LLVM_CMAKE_ARGS_ARM64 -DUSE_INTERCEPTOR_LIB=On ..
+	else
+		cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=arm64-v8a -DANDROID_NATIVE_API_LEVEL=26 -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DUSE_INTERCEPTOR_LIB=Off ..
+	fi
 	make -j$(nproc)
 
 	if ! ls bin/*.apk; then
