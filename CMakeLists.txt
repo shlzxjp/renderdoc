@@ -49,24 +49,49 @@ if(BUILD_ANDROID)
 
     message(STATUS "Using Android SDK found in ${ANDROID_SDK_ROOT_PATH}")
 
+    # 首先尝试现代 NDK（有 CMake 工具链）
     if(DEFINED ENV{ANDROID_NDK_HOME} AND EXISTS "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake")
         set(ANDROID_NDK_ROOT_PATH "$ENV{ANDROID_NDK_HOME}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN TRUE)
     elseif(DEFINED ENV{ANDROID_NDK_ROOT} AND EXISTS "$ENV{ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake")
         set(ANDROID_NDK_ROOT_PATH "$ENV{ANDROID_NDK_ROOT}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN TRUE)
     elseif(DEFINED ENV{NDK_HOME} AND EXISTS "$ENV{NDK_HOME}/build/cmake/android.toolchain.cmake")
         set(ANDROID_NDK_ROOT_PATH "$ENV{NDK_HOME}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN TRUE)
     elseif(DEFINED ENV{ANDROID_NDK} AND EXISTS "$ENV{ANDROID_NDK}/build/cmake/android.toolchain.cmake")
         set(ANDROID_NDK_ROOT_PATH "$ENV{ANDROID_NDK}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN TRUE)
+    # 然后尝试旧版 NDK（如 NDK 16）
+    elseif(DEFINED ENV{ANDROID_NDK_HOME} AND EXISTS "$ENV{ANDROID_NDK_HOME}/build/core")
+        set(ANDROID_NDK_ROOT_PATH "$ENV{ANDROID_NDK_HOME}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN FALSE)
+    elseif(DEFINED ENV{ANDROID_NDK_ROOT} AND EXISTS "$ENV{ANDROID_NDK_ROOT}/build/core")
+        set(ANDROID_NDK_ROOT_PATH "$ENV{ANDROID_NDK_ROOT}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN FALSE)
+    elseif(DEFINED ENV{NDK_HOME} AND EXISTS "$ENV{NDK_HOME}/build/core")
+        set(ANDROID_NDK_ROOT_PATH "$ENV{NDK_HOME}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN FALSE)
+    elseif(DEFINED ENV{ANDROID_NDK} AND EXISTS "$ENV{ANDROID_NDK}/build/core")
+        set(ANDROID_NDK_ROOT_PATH "$ENV{ANDROID_NDK}")
+        set(ANDROID_NDK_HAS_MODERN_TOOLCHAIN FALSE)
     else()
         message(FATAL_ERROR "Can't locate Android NDK, set ANDROID_NDK_HOME, ANDROID_NDK_ROOT, NDK_HOME or ANDROID_NDK")
     endif()
 
     message(STATUS "Using Android NDK found in ${ANDROID_NDK_ROOT_PATH}")
 
-    set(CMAKE_TOOLCHAIN_FILE
-        "${ANDROID_NDK_ROOT_PATH}/build/cmake/android.toolchain.cmake"
-        CACHE STRING
-        "The Android toolchain file")
+    # 只为现代 NDK 设置 CMAKE_TOOLCHAIN_FILE
+    if(ANDROID_NDK_HAS_MODERN_TOOLCHAIN)
+        set(CMAKE_TOOLCHAIN_FILE
+            "${ANDROID_NDK_ROOT_PATH}/build/cmake/android.toolchain.cmake"
+            CACHE STRING
+            "The Android toolchain file")
+        message(STATUS "Using modern NDK toolchain")
+    else()
+        message(STATUS "Using legacy NDK (no modern CMake toolchain)")
+        # 对于旧版 NDK，我们依赖构建脚本来设置环境
+    endif()
 
     option(STRIP_ANDROID_LIBRARY "Strip the resulting android library" OFF)
 

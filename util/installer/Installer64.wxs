@@ -336,8 +336,8 @@
     </Directory>
 
     <DirectoryRef Id="TARGETDIR">
-      <Merge Id="VCRedist32" DiskId="1" Language="0" SourceFile="C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Redist\MSVC\v142\MergeModules\Microsoft_VC142_CRT_x64.msm"/>
-      <Merge Id="VCRedist64" DiskId="1" Language="0" SourceFile="C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Redist\MSVC\v142\MergeModules\Microsoft_VC142_CRT_x86.msm"/>
+      <Merge Id="VCRedist64" DiskId="1" Language="0" SourceFile="C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Redist\MSVC\v143\MergeModules\Microsoft_VC143_CRT_x64.msm"/>
+      <Merge Id="VCRedist32" DiskId="1" Language="0" SourceFile="C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Redist\MSVC\v143\MergeModules\Microsoft_VC143_CRT_x86.msm"/>
     </DirectoryRef>
 
     <!-- check if the runtime is installed -->
@@ -359,7 +359,7 @@
         Type="raw" />
     </Property>
 
-    <!-- grab the major/minor version numbers, as we need to check if 2019 is installed or only an older version -->
+    <!-- grab the major/minor version numbers, as we need to check if 2022 is installed or only an older version -->
     <Property Id="VCRT64MAJOR" Value="0">
       <RegistrySearch Id="VCRT64MajorKey"
         Root="HKLM"
@@ -444,18 +444,18 @@
 
       </Feature>
 
-      <Feature Id='VCRedist32' Title='Visual C++ 2019 Runtime (x86)' AllowAdvertise="no" Display="hidden" Level="1">
-        <!-- install the redist either if it's not installed at all, or if it's too old (14.20 is the first VS2019 redist) -->
+      <Feature Id='VCRedist32' Title='Visual C++ 2022 Runtime (x86)' AllowAdvertise="no" Display="hidden" Level="1">
+        <!-- install the redist either if it's not installed at all, or if it's too old (14.30 is the first VS2022 redist) -->
         <Condition Level='0'>
-          <![CDATA[Installed OR (VCRT32INSTALLED <> "0" AND VCRT32MAJOR >= "14" AND VCRT32MINOR >= "20")]]>
+          <![CDATA[Installed OR (VCRT32INSTALLED <> "0" AND VCRT32MAJOR >= "14" AND VCRT32MINOR >= "30")]]>
         </Condition>
 
         <MergeRef Id="VCRedist32"/>
       </Feature>
 
-      <Feature Id='VCRedist64' Title='Visual C++ 2019 Runtime (x64)' AllowAdvertise="no" Display="hidden" Level="1">
+      <Feature Id='VCRedist64' Title='Visual C++ 2022 Runtime (x64)' AllowAdvertise="no" Display="hidden" Level="1">
         <Condition Level='0'>
-          <![CDATA[Installed OR (VCRT64INSTALLED <> "0" AND VCRT64MAJOR >= "14" AND VCRT64MINOR >= "20")]]>
+          <![CDATA[Installed OR (VCRT64INSTALLED <> "0" AND VCRT64MAJOR >= "14" AND VCRT64MINOR >= "30")]]>
         </Condition>
 
         <MergeRef Id="VCRedist64"/>
