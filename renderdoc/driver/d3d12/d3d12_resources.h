@@ -25,6 +25,7 @@
 #pragma once
 
 #include "driver/shaders/dxbc/dxbc_container.h"
+#include "driver/dxgi/dxgi_common.h"
 #include "serialise/serialiser.h"
 #include "d3d12_device.h"
 #include "d3d12_manager.h"
@@ -1604,6 +1605,15 @@ public:
     if(ret.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER &&
        ret.Alignment != D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
       ret.Alignment = 0;
+    
+    // Fix for BC7_TYPELESS + UAV flag incompatibility issue
+    // Block compressed formats cannot be used with D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+    if(IsBlockFormat(ret.Format) && (ret.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+    {
+      RDCWARN("Removing UAV flag from BCn texture desc in GetDesc1(). Format: %s, Original Flags: 0x%x", ToStr(ret.Format).c_str(), ret.Flags);
+      ret.Flags &= ~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+    
     return ret;
   }
   virtual D3D12_GPU_VIRTUAL_ADDRESS STDMETHODCALLTYPE GetGPUVirtualAddress()
@@ -1676,6 +1686,14 @@ public:
       return {};
 
     D3D12_RESOURCE_DESC1 ret = real2->GetDesc1();
+    
+    // Fix for BC7_TYPELESS + UAV flag incompatibility issue
+    // Block compressed formats cannot be used with D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+    if(IsBlockFormat(ret.Format) && (ret.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+    {
+      RDCWARN("Removing UAV flag from BCn texture desc in GetDesc1(). Format: %s, Original Flags: 0x%x", ToStr(ret.Format).c_str(), ret.Flags);
+      ret.Flags &= ~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
 
     SAFE_RELEASE(real2);
     return ret;

@@ -513,7 +513,39 @@ void D3D12Descriptor::Create(D3D12_DESCRIPTOR_HEAP_TYPE heapType, WrappedID3D12D
         }
       }
 
-      dev->CreateUnorderedAccessView(res, countRes, desc, handle);
+      // Check for UAV incompatibility - either BC format or resource without UAV flag
+      bool skipUAV = false;
+      if(res && desc)
+      {
+        // Check if it's a BC format
+        if(IsBlockFormat(desc->Format))
+        {
+          RDCWARN("Skipping UAV creation for BC format texture. Format: %s, Resource: %s", 
+                  ToStr(desc->Format).c_str(), ToStr(GetResID(res)).c_str());
+          skipUAV = true;
+        }
+        // Check if resource doesn't have UAV flag (which we might have removed)
+        else
+        {
+          D3D12_RESOURCE_DESC resourceDesc = ((WrappedID3D12Resource*)res)->GetDesc();
+          if(!(resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+          {
+            RDCWARN("Skipping UAV creation for resource without UAV flag. Format: %s, Resource: %s", 
+                    ToStr(desc->Format).c_str(), ToStr(GetResID(res)).c_str());
+            skipUAV = true;
+          }
+        }
+      }
+
+      if(skipUAV)
+      {
+        // Create a default/null UAV instead to maintain descriptor heap layout
+        dev->CreateUnorderedAccessView(NULL, NULL, defaultUAV(), handle);
+      }
+      else
+      {
+        dev->CreateUnorderedAccessView(res, countRes, desc, handle);
+      }
       break;
     }
     case D3D12DescriptorType::Undefined:

@@ -134,6 +134,16 @@ bool WrappedID3D12Device::Serialise_CreateResource(
   D3D12_RESOURCE_DESC desc0 = {};
   memcpy(&desc0, &desc, sizeof(desc0));
 
+  // Fix for BC7_TYPELESS + UAV flag incompatibility issue
+  // Block compressed formats cannot be used with D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+  if(IsBlockFormat(desc.Format) && (desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS))
+  {
+    RDCWARN("Removing UAV flag from BCn texture desc during resource creation to avoid E_INVALIDARG. Format: %s, Original Flags: 0x%x", ToStr(desc.Format).c_str(), desc.Flags);
+    desc.Flags &= ~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    // Also update desc0 for older API versions
+    desc0.Flags &= ~D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+
   ID3D12Resource *ret = NULL;
   HRESULT hr = S_OK;
 
@@ -216,6 +226,8 @@ bool WrappedID3D12Device::Serialise_CreateResource(
 
   if(FAILED(hr))
   {
+    RDCERR("Resource creation failed - ChunkType: %s, Format: %s, Flags: 0x%x, HRESULT: %s", 
+           ToStr(chunkType).c_str(), ToStr(desc.Format).c_str(), desc.Flags, ToStr(hr).c_str());
     SET_ERROR_RESULT(m_FailedReplayResult, ResultCode::APIReplayFailed,
                      "Failed recreating %s, HRESULT: %s", ToStr(chunkType).c_str(),
                      ToStr(hr).c_str());

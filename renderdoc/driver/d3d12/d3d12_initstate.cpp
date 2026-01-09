@@ -842,8 +842,8 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create CPU descriptor heap for initial state: HRESULT: %s",
-               ToStr(hr).c_str());
+        RDCERR("Failed to create CPU descriptor heap for initial state: Type=%s, NumDescriptors=%u, Flags=0x%x, HRESULT: %s",
+               ToStr(desc.Type).c_str(), desc.NumDescriptors, desc.Flags, ToStr(hr).c_str());
         return false;
       }
 
