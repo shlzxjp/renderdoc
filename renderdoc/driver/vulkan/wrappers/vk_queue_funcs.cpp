@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -60,12 +60,11 @@ bool WrappedVulkan::Serialise_vkGetDeviceQueue(SerialiserType &ser, VkDevice dev
       ResourceId live = GetResourceManager()->GetDispWrapper(queue)->id;
 
       // whenever the new ID is requested, return the old ID, via replacements.
-      GetResourceManager()->ReplaceResource(Queue, GetResourceManager()->GetOriginalID(live));
+      GetResourceManager()->ReplaceResource(Queue, live);
     }
     else
     {
-      GetResourceManager()->WrapResource(Unwrap(device), queue);
-      GetResourceManager()->AddLiveResource(Queue, queue);
+      GetResourceManager()->WrapResource(Queue, Unwrap(device), queue);
     }
 
     if(remapFamily == m_QueueFamilyIdx && m_Queue == VK_NULL_HANDLE)
@@ -119,7 +118,7 @@ void WrappedVulkan::vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex,
     }
     else
     {
-      ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pQueue);
+      ResourceId id = GetResourceManager()->WrapResource(ResourceId(), Unwrap(device), *pQueue);
 
       {
         Chunk *chunk = NULL;
@@ -312,8 +311,7 @@ void WrappedVulkan::ReplayQueueSubmit(VkQueue queue, VkSubmitInfo2 submitInfo, r
       DoSubmit(queue, submitInfo);
       FlushQ();
 
-      ResourceId cmd = GetResourceManager()->GetOriginalID(
-          GetResID(submitInfo.pCommandBufferInfos[0].commandBuffer));
+      ResourceId cmd = GetResID(submitInfo.pCommandBufferInfos[0].commandBuffer);
 
       submitInfo.pCommandBufferInfos++;
 
@@ -417,8 +415,7 @@ void WrappedVulkan::ReplayQueueSubmit(VkQueue queue, VkSubmitInfo2 submitInfo, r
     // advance m_CurEventID to match the events added when reading
     for(uint32_t c = 0; c < submitInfo.commandBufferInfoCount; c++)
     {
-      ResourceId cmd = GetResourceManager()->GetOriginalID(
-          GetResID(submitInfo.pCommandBufferInfos[c].commandBuffer));
+      ResourceId cmd = GetResID(submitInfo.pCommandBufferInfos[c].commandBuffer);
 
       m_RootEventID += m_BakedCmdBufferInfo[cmd].eventCount;
       m_RootActionID += m_BakedCmdBufferInfo[cmd].actionCount;
@@ -457,7 +454,7 @@ void WrappedVulkan::ReplayQueueSubmit(VkQueue queue, VkSubmitInfo2 submitInfo, r
       for(uint32_t c = 0; c < submitInfo.commandBufferInfoCount; c++)
       {
         VkCommandBufferSubmitInfo info = submitInfo.pCommandBufferInfos[c];
-        ResourceId cmdId = GetResourceManager()->GetOriginalID(GetResID(info.commandBuffer));
+        ResourceId cmdId = GetResID(info.commandBuffer);
 
         // account for the virtual vkBeginCommandBuffer label at the start of the events here
         // so it matches up to baseEvent
@@ -2248,8 +2245,7 @@ bool WrappedVulkan::Serialise_vkGetDeviceQueue2(SerialiserType &ser, VkDevice de
     QueueInfo.queueIndex = remapIndex;
     ObjDisp(device)->GetDeviceQueue2(Unwrap(device), &QueueInfo, &queue);
 
-    GetResourceManager()->WrapResource(Unwrap(device), queue);
-    GetResourceManager()->AddLiveResource(Queue, queue);
+    GetResourceManager()->WrapResource(Queue, Unwrap(device), queue);
 
     if(remapFamily == m_QueueFamilyIdx && m_Queue == VK_NULL_HANDLE)
     {
@@ -2301,7 +2297,7 @@ void WrappedVulkan::vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2 
     }
     else
     {
-      ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pQueue);
+      ResourceId id = GetResourceManager()->WrapResource(ResourceId(), Unwrap(device), *pQueue);
 
       {
         Chunk *chunk = NULL;

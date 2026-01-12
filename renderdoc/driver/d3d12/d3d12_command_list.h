@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -207,8 +207,8 @@ private:
 public:
   ALLOCATE_WITH_WRAPPED_POOL(WrappedID3D12GraphicsCommandList);
 
-  WrappedID3D12GraphicsCommandList(ID3D12GraphicsCommandList *real, WrappedID3D12Device *device,
-                                   CaptureState &state);
+  WrappedID3D12GraphicsCommandList(ResourceId id, ID3D12GraphicsCommandList *real,
+                                   WrappedID3D12Device *device, CaptureState &state);
   virtual ~WrappedID3D12GraphicsCommandList();
 
   ResourceId GetResourceID() { return m_ResourceID; }

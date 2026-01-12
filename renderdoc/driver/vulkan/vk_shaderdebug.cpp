@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2020-2025 Baldur Karlsson
+ * Copyright (c) 2020-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -170,7 +170,7 @@ public:
           m_SamplerDescriptors.append(replay->GetSamplerDescriptors(store, ranges));
         }
 
-        store = replay->GetLiveID(acc.descriptorStore);
+        store = acc.descriptorStore;
         ranges.clear();
       }
 
@@ -215,7 +215,7 @@ public:
         const VulkanCreationInfo::PipelineLayout &pipeLayoutInfo =
             m_Creation.GetPipelineLayoutInfo(srcData.pipeLayout);
 
-        ResourceId setOrig = m_pDriver->GetResourceManager()->GetOriginalID(sourceSet);
+        ResourceId setOrig = sourceSet;
 
         const BindingStorage &bindStorage =
             m_pDriver->GetCurrentDescSetBindingStorage(srcData.descSet);
@@ -761,12 +761,11 @@ public:
     VkMarkerRegion markerRegion("QueueSampleGather");
 
     VkBufferView bufferView =
-        m_pDriver->GetResourceManager()->GetLiveHandle<VkBufferView>(bufferViewDescriptor.view);
+        m_pDriver->GetResourceManager()->GetHandle<VkBufferView>(bufferViewDescriptor.view);
 
     VkSampler sampler =
-        m_pDriver->GetResourceManager()->GetLiveHandle<VkSampler>(samplerDescriptor.object);
-    VkImageView view =
-        m_pDriver->GetResourceManager()->GetLiveHandle<VkImageView>(imageDescriptor.view);
+        m_pDriver->GetResourceManager()->GetHandle<VkSampler>(samplerDescriptor.object);
+    VkImageView view = m_pDriver->GetResourceManager()->GetHandle<VkImageView>(imageDescriptor.view);
     VkImageLayout layout = convert((DescriptorSlotImageLayout)imageDescriptor.byteOffset);
 
     // NULL view : return 0,0,0,0
@@ -940,7 +939,7 @@ public:
     if(sampleView == VK_NULL_HANDLE && view != VK_NULL_HANDLE)
     {
       VkImageViewCreateInfo viewInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-      viewInfo.image = m_pDriver->GetResourceManager()->GetCurrentHandle<VkImage>(viewProps.image);
+      viewInfo.image = m_pDriver->GetResourceManager()->GetHandle<VkImage>(viewProps.image);
       viewInfo.format = viewProps.format;
       viewInfo.viewType = viewProps.viewType;
       if(viewInfo.viewType == VK_IMAGE_VIEW_TYPE_1D)
@@ -1023,8 +1022,7 @@ public:
           if(samplerProps.ycbcr != ResourceId())
           {
             ycbcrInfo.conversion =
-                m_pDriver->GetResourceManager()->GetCurrentHandle<VkSamplerYcbcrConversion>(
-                    viewProps.image);
+                m_pDriver->GetResourceManager()->GetHandle<VkSamplerYcbcrConversion>(viewProps.image);
 
             ycbcrInfo.pNext = sampInfo.pNext;
             sampInfo.pNext = &ycbcrInfo;
@@ -1439,7 +1437,7 @@ public:
               VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
               NULL,
               0,
-              m_pDriver->GetResourceManager()->GetLiveHandle<VkBuffer>(bufferViewDescriptor.resource),
+              m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(bufferViewDescriptor.resource),
               key.format,
               bufferViewDescriptor.byteOffset,
               bufferViewDescriptor.byteSize,
@@ -2116,9 +2114,8 @@ private:
 
       if(bufData.resource != ResourceId())
       {
-        m_pDriver->GetReplay()->GetBufferData(
-            m_pDriver->GetResourceManager()->GetLiveID(bufData.resource), bufData.byteOffset,
-            bufData.byteSize, data);
+        m_pDriver->GetReplay()->GetBufferData(bufData.resource, bufData.byteOffset,
+                                              bufData.byteSize, data);
       }
     }
 
@@ -2160,7 +2157,7 @@ private:
         if(imgData.view == ResourceId())
         {
           // descriptor buffer, no buffer view
-          buffer = m_pDriver->GetResourceManager()->GetLiveID(imgData.resource);
+          buffer = imgData.resource;
           offset = imgData.byteOffset;
           format = MakeVkFormat(imgData.format);
           byteWidth = imgData.byteSize;
@@ -2168,7 +2165,7 @@ private:
         else
         {
           const VulkanCreationInfo::BufferView &viewProps =
-              m_Creation.GetBufferViewInfo(m_pDriver->GetResourceManager()->GetLiveID(imgData.view));
+              m_Creation.GetBufferViewInfo(imgData.view);
           buffer = viewProps.buffer;
           offset = viewProps.offset;
           format = viewProps.format;
@@ -2193,14 +2190,11 @@ private:
 
         data.samplePitch = data.slicePitch = data.rowPitch = data.width * data.texelSize;
 
-        m_pDriver->GetReplay()->GetBufferData(
-            m_pDriver->GetResourceManager()->GetLiveID(imgData.resource), offset, data.rowPitch,
-            data.bytes);
+        m_pDriver->GetReplay()->GetBufferData(imgData.resource, offset, data.rowPitch, data.bytes);
       }
       else if(imgData.view != ResourceId())
       {
-        const VulkanCreationInfo::ImageView &viewProps =
-            m_Creation.GetImageViewInfo(m_pDriver->GetResourceManager()->GetLiveID(imgData.view));
+        const VulkanCreationInfo::ImageView &viewProps = m_Creation.GetImageViewInfo(imgData.view);
         if(viewProps.image != ResourceId())
         {
           const VulkanCreationInfo::Image &imageProps = m_Creation.GetImageInfo(viewProps.image);

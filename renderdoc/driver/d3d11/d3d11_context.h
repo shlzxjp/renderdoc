@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -100,10 +100,11 @@ struct D3DDescriptorStore : public ID3D11DeviceChild
 {
 private:
   ResourceId m_ID;
+  WrappedID3D11Device *m_pDevice;
 
 public:
   D3DDescriptorStore(WrappedID3D11Device *device);
-  virtual ~D3DDescriptorStore() {}
+  virtual ~D3DDescriptorStore();
 
   ResourceId GetResourceID() { return m_ID; }
 
@@ -294,6 +295,8 @@ public:
 
   WrappedID3D11DeviceContext(WrappedID3D11Device *realDevice, ID3D11DeviceContext *context);
   virtual ~WrappedID3D11DeviceContext();
+
+  void SetReplayResourceID(ResourceId id) { m_ResourceID = id; }
 
   void VerifyState();
 

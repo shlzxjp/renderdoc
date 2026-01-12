@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -778,7 +778,7 @@ void SparseBinds::Apply(WrappedID3D12Device *device, ID3D12Resource *resource)
     {
       device->GetQueue()->UpdateTileMappings(
           resource, 1, &bind.regionStart, &bind.regionSize,
-          bind.heap == ResourceId() ? NULL : (ID3D12Heap *)rm->GetLiveResource(bind.heap), 1,
+          bind.heap == ResourceId() ? NULL : (ID3D12Heap *)rm->GetResource(bind.heap), 1,
           &bind.rangeFlag, &bind.rangeOffset, &bind.rangeCount, D3D12_TILE_MAPPING_FLAG_NONE);
     }
   }
@@ -826,7 +826,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
 
     if(IsReplayingAndReading())
     {
-      WrappedID3D12DescriptorHeap *heap = (WrappedID3D12DescriptorHeap *)GetLiveResource(id);
+      WrappedID3D12DescriptorHeap *heap = (WrappedID3D12DescriptorHeap *)GetResource(id);
 
       if(!names.empty())
         heap->GetNames() = names;
@@ -853,7 +853,8 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
         return false;
       }
 
-      copyheap = new WrappedID3D12DescriptorHeap(copyheap, m_Device, desc, heap->GetNumDescriptors());
+      copyheap = new WrappedID3D12DescriptorHeap(ResourceId(), copyheap, m_Device, desc,
+                                                 heap->GetNumDescriptors());
 
       D3D12_CPU_DESCRIPTOR_HANDLE handle = copyheap->GetCPUDescriptorHandleForHeapStart();
 
@@ -900,7 +901,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
 
     if(IsReplayingAndReading())
     {
-      ID3D12DeviceChild *live = GetLiveResource(id);
+      ID3D12DeviceChild *live = GetResource(id);
       liveRes = (ID3D12Resource *)live;
       if(type == Resource_Heap)
         liveRes = ((WrappedID3D12Heap *)live)->GetUnwrappedWholeMemBuffer();
@@ -979,7 +980,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
       D3D12_RESOURCE_DESC resDesc = liveRes->GetDesc();
 
       D3D12_HEAP_PROPERTIES heapProps = {};
-      if(!m_Device->IsSparseResource(GetLiveID(id)))
+      if(!m_Device->IsSparseResource(id))
         liveRes->GetHeapProperties(&heapProps, NULL);
 
       const bool isCPUCopyHeap =
@@ -1114,7 +1115,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
         else
         {
           D3D12_HEAP_PROPERTIES heapProps = {};
-          if(!m_Device->IsSparseResource(GetLiveID(id)))
+          if(!m_Device->IsSparseResource(id))
             liveRes->GetHeapProperties(&heapProps, NULL);
 
           // if the resource is sparse, create on default heap
@@ -1397,7 +1398,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
             UINT64 offsInASB;
             m_Device->GetResIDFromOrigAddr(blasAddrs[i], asbId, offsInASB);
 
-            ID3D12Resource *asb = GetLiveAs<ID3D12Resource>(asbId);
+            ID3D12Resource *asb = GetResAs<ID3D12Resource>(asbId);
 
             if(asbId == ResourceId() || asb == NULL)
             {
@@ -1537,7 +1538,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
       {
         if(IsReplayingAndReading())
         {
-          D3D12AccelerationStructure *as = (D3D12AccelerationStructure *)GetLiveResource(id);
+          D3D12AccelerationStructure *as = (D3D12AccelerationStructure *)GetResource(id);
 
           // if this is a TLAS, patch the addresses of any BLASs in the instance data before uploading it
           if(buildData->NumBLAS > 0)
@@ -1554,7 +1555,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
               UINT64 blasOffs;
               m_Device->GetResIDFromOrigAddr(instances[i].AccelerationStructure, blasId, blasOffs);
 
-              WrappedID3D12Resource *blasASB = GetLiveAs<WrappedID3D12Resource>(blasId);
+              WrappedID3D12Resource *blasASB = GetResAs<WrappedID3D12Resource>(blasId);
 
               D3D12AccelerationStructure *blasCheck = NULL;
 
@@ -1589,7 +1590,7 @@ bool D3D12ResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceI
                 continue;
               }
 
-              if(id < GetOriginalID(blasCheck->GetResourceID()))
+              if(id < blasCheck->GetResourceID())
               {
                 RDCWARN("  %u: BLAS referenced by TLAS is newer than TLAS - possibly stale TLAS", i);
                 instances[i].AccelerationStructure = 0;
@@ -1695,9 +1696,9 @@ template bool D3D12ResourceManager::Serialise_InitialState(WriteSerialiser &ser,
                                                            D3D12ResourceRecord *record,
                                                            const D3D12InitialContents *initial);
 
-void D3D12ResourceManager::Create_InitialState(ResourceId id, ID3D12DeviceChild *live, bool)
+void D3D12ResourceManager::Create_InitialState(ResourceId id, ID3D12DeviceChild *res, bool)
 {
-  D3D12ResourceType type = IdentifyTypeByPtr(live);
+  D3D12ResourceType type = IdentifyTypeByPtr(res);
 
   if(type == Resource_DescriptorHeap)
   {
@@ -1707,18 +1708,18 @@ void D3D12ResourceManager::Create_InitialState(ResourceId id, ID3D12DeviceChild 
   }
   else if(type == Resource_Resource || type == Resource_Heap)
   {
-    ID3D12Resource *res = ((ID3D12Resource *)live);
+    ID3D12Resource *resource = ((ID3D12Resource *)res);
 
-    WrappedID3D12Resource *wrappedResource = (WrappedID3D12Resource *)res;
+    WrappedID3D12Resource *wrappedResource = (WrappedID3D12Resource *)resource;
 
     D3D12_HEAP_PROPERTIES heapProps = {};
     D3D12_RESOURCE_DESC resDesc = {};
     if(type == Resource_Heap)
     {
       wrappedResource = NULL;
-      res = NULL;
-      resDesc = ((WrappedID3D12Heap *)live)->GetUnwrappedWholeMemBuffer()->GetDesc();
-      heapProps = ((WrappedID3D12Heap *)live)->GetDesc().Properties;
+      resource = NULL;
+      resDesc = ((WrappedID3D12Heap *)res)->GetUnwrappedWholeMemBuffer()->GetDesc();
+      heapProps = ((WrappedID3D12Heap *)res)->GetDesc().Properties;
     }
     else if(wrappedResource->IsAccelerationStructureResource())
     {
@@ -1733,10 +1734,10 @@ void D3D12ResourceManager::Create_InitialState(ResourceId id, ID3D12DeviceChild 
     }
     else
     {
-      resDesc = res->GetDesc();
+      resDesc = resource->GetDesc();
 
-      if(!m_Device->IsSparseResource(GetResID(live)))
-        res->GetHeapProperties(&heapProps, NULL);
+      if(!m_Device->IsSparseResource(GetResID(res)))
+        resource->GetHeapProperties(&heapProps, NULL);
     }
 
     const bool isCPUCopyHeap = heapProps.Type == D3D12_HEAP_TYPE_CUSTOM &&
@@ -1793,7 +1794,7 @@ void D3D12ResourceManager::Create_InitialState(ResourceId id, ID3D12DeviceChild 
         initContents.resourceType = type;
         initContents.resource = copy;
 
-        if(m_Device->IsSparseResource(GetResID(live)))
+        if(m_Device->IsSparseResource(GetResID(res)))
           initContents.sparseBinds = new SparseBinds(0);
 
         SetInitialContents(id, initContents);
@@ -1811,7 +1812,7 @@ void D3D12ResourceManager::Create_InitialState(ResourceId id, ID3D12DeviceChild 
   }
 }
 
-void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12InitialContents &data)
+void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *res, D3D12InitialContents &data)
 {
   if(m_Device->HasFatalError())
     return;
@@ -1820,7 +1821,7 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
 
   if(type == Resource_DescriptorHeap)
   {
-    WrappedID3D12DescriptorHeap *dstheap = (WrappedID3D12DescriptorHeap *)live;
+    WrappedID3D12DescriptorHeap *dstheap = (WrappedID3D12DescriptorHeap *)res;
     WrappedID3D12DescriptorHeap *srcheap = (WrappedID3D12DescriptorHeap *)data.resource;
 
     if(srcheap)
@@ -1836,15 +1837,15 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
     if(data.tag == D3D12InitialContents::AccelerationStructure)
       return;
 
-    ResourceId id = GetResID(live);
+    ResourceId id = GetResID(res);
 
     if(IsActiveReplaying(m_State) && m_Device->IsReadOnlyResource(id))
     {
     }
     else if(data.tag == D3D12InitialContents::SparseOnly)
     {
-      if(IsLoading(m_State) || m_Device->GetQueue()->IsSparseUpdatedResource(GetResID(live)))
-        data.sparseBinds->Apply(m_Device, (ID3D12Resource *)live);
+      if(IsLoading(m_State) || m_Device->GetQueue()->IsSparseUpdatedResource(GetResID(res)))
+        data.sparseBinds->Apply(m_Device, (ID3D12Resource *)res);
 
       if(m_Device->HasFatalError())
         return;
@@ -1856,11 +1857,11 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
 
       if(type == Resource_Heap)
       {
-        unwrappedCopyDst = ((WrappedID3D12Heap *)live)->GetUnwrappedWholeMemBuffer();
+        unwrappedCopyDst = ((WrappedID3D12Heap *)res)->GetUnwrappedWholeMemBuffer();
       }
       else
       {
-        wrappedCopyDst = (ID3D12Resource *)live;
+        wrappedCopyDst = (ID3D12Resource *)res;
         unwrappedCopyDst = Unwrap(wrappedCopyDst);
       }
 
@@ -1873,8 +1874,8 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
       D3D12_HEAP_PROPERTIES heapProps = {};
       if(data.sparseBinds)
       {
-        if(IsLoading(m_State) || m_Device->GetQueue()->IsSparseUpdatedResource(GetResID(live)))
-          data.sparseBinds->Apply(m_Device, (ID3D12Resource *)live);
+        if(IsLoading(m_State) || m_Device->GetQueue()->IsSparseUpdatedResource(GetResID(res)))
+          data.sparseBinds->Apply(m_Device, (ID3D12Resource *)res);
 
         if(m_Device->HasFatalError())
           return;
@@ -2015,7 +2016,7 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
 
         if(type != Resource_Heap)
         {
-          barriers.Configure(wrappedCopyDst, m_Device->GetSubresourceStates(GetResID(live)),
+          barriers.Configure(wrappedCopyDst, m_Device->GetSubresourceStates(GetResID(res)),
                              BarrierSet::CopyDestAccess);
           barriers.Apply(list);
         }
@@ -2132,7 +2133,7 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
   }
   else if(type == Resource_AccelerationStructure)
   {
-    D3D12AccelerationStructure *as = (D3D12AccelerationStructure *)live;
+    D3D12AccelerationStructure *as = (D3D12AccelerationStructure *)res;
 
     if(!as)
     {
@@ -2220,8 +2221,7 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
 
         if(D3D12_Debug_RT_Auditing())
         {
-          RDCLOG("Apply TLAS - Rebuilding %s to %llx",
-                 ToStr(GetOriginalID(as->GetResourceID())).c_str(),
+          RDCLOG("Apply TLAS - Rebuilding %s to %llx", ToStr(as->GetResourceID()).c_str(),
                  desc.DestAccelerationStructureData);
 
           // verify that all children we intended to reference have now been built.
@@ -2262,7 +2262,7 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
         if(!data.cachedBuiltAS)
           return;
 
-        ResourceId origId = GetOriginalID(as->GetResourceID());
+        ResourceId id = as->GetResourceID();
 
         UINT numPostBuilds = 0;
         D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC postDesc[2] = {};
@@ -2289,7 +2289,7 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
 
         if(D3D12_Debug_RT_Auditing())
         {
-          RDCLOG("Apply BLAS - Caching %s to %llx then copying to %llx", ToStr(origId).c_str(),
+          RDCLOG("Apply BLAS - Caching %s to %llx then copying to %llx", ToStr(id).c_str(),
                  desc.DestAccelerationStructureData, as->GetVirtualAddress());
 
           if(GetRTManager()->PostbuildReadbackBuffer)
@@ -2330,9 +2330,8 @@ void D3D12ResourceManager::Apply_InitialState(ID3D12DeviceChild *live, D3D12Init
 
         if(D3D12_Debug_RT_Auditing())
         {
-          RDCLOG("Apply BLAS - Copying %s from %llx to %llx",
-                 ToStr(GetOriginalID(as->GetResourceID())).c_str(), data.cachedBuiltAS->Address(),
-                 as->GetVirtualAddress());
+          RDCLOG("Apply BLAS - Copying %s from %llx to %llx", ToStr(as->GetResourceID()).c_str(),
+                 data.cachedBuiltAS->Address(), as->GetVirtualAddress());
         }
       }
 

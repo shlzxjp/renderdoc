@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -398,9 +398,6 @@ public:
   D3D12_GPU_DESCRIPTOR_HANDLE GetGPU() const;
   PortableHandle GetPortableHandle() const;
 
-  // these IDs are the live IDs during replay, not the original IDs. Treat them as if you called
-  // GetResID(resource).
-  //
   // descriptor heap itself
   ResourceId GetHeapResourceId() const;
   //
@@ -1459,15 +1456,9 @@ public:
   ~D3D12ResourceManager() { SAFE_DELETE(m_RTManager); }
 
   template <class T>
-  T *GetLiveAs(ResourceId id, bool optional = false)
+  T *GetResAs(ResourceId id, bool optional = false)
   {
-    return (T *)GetLiveResource(id, optional);
-  }
-
-  template <class T>
-  T *GetCurrentAs(ResourceId id)
-  {
-    return (T *)GetCurrentResource(id);
+    return (T *)GetResource(id, optional);
   }
 
   template <typename D3D12Type>

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2017-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -153,6 +153,22 @@ static bool ResourceReferencesMatch(const ShaderVariable &a, const ShaderVariabl
     }
   }
   return false;
+}
+
+void SortRDWidgetItems(QVector<RDTreeWidgetItem *> &members)
+{
+  // Sort the children by offset, then global source var index, then by text.
+  // Using the global source var index allows resource arrays to be presented in index order
+  // rather than by name, so for example arr[2] comes before arr[10]
+  std::sort(members.begin(), members.end(), [](const RDTreeWidgetItem *a, const RDTreeWidgetItem *b) {
+    VariableTag at = a->tag().value<VariableTag>();
+    VariableTag bt = b->tag().value<VariableTag>();
+    if(at.offset != bt.offset)
+      return at.offset < bt.offset;
+    if(at.globalSourceVar && bt.globalSourceVar)
+      return at.sourceVarIdx < bt.sourceVarIdx;
+    return a->text(0) < b->text(0);
+  });
 }
 
 struct AccessedResourceTag
@@ -3130,17 +3146,7 @@ void ShaderViewer::combineStructures(RDTreeWidgetItem *root, int skipPrefixLengt
       c--;
     }
 
-    // Sort the children by offset, then global source var index, then by text.
-    // Using the global source var index allows resource arrays to be presented in index order
-    // rather than by name, so for example arr[2] comes before arr[10]
-    std::sort(matches.begin(), matches.end(),
-              [](const RDTreeWidgetItem *a, const RDTreeWidgetItem *b) {
-                VariableTag at = a->tag().value<VariableTag>();
-                VariableTag bt = b->tag().value<VariableTag>();
-                if(at.offset != bt.offset)
-                  return at.offset < bt.offset;
-                return a->text(0) < b->text(0);
-              });
+    SortRDWidgetItems(matches);
 
     // create a new parent with just the prefix
     prefix.chop(1);
@@ -4560,6 +4566,7 @@ bool ShaderViewer::updateWatchVariable(RDTreeWidgetItem *watchItem, const RDTree
         });
         VariableTag tag = VariableTag(DebugVariableType::Variable, path);
         tag.state = WatchVarState::Valid;
+        tag.offset = i;
         item->setTag(QVariant::fromValue(tag));
         watchItem->addChild(item);
         valid.push_back(false);
@@ -4586,14 +4593,7 @@ bool ShaderViewer::updateWatchVariable(RDTreeWidgetItem *watchItem, const RDTree
     while(watchItem->childCount())
       members.push_back(watchItem->takeChild(0));
 
-    std::sort(members.begin(), members.end(),
-              [](const RDTreeWidgetItem *a, const RDTreeWidgetItem *b) {
-                VariableTag at = a->tag().value<VariableTag>();
-                VariableTag bt = b->tag().value<VariableTag>();
-                if(at.offset != bt.offset)
-                  return at.offset < bt.offset;
-                return a->text(0) < b->text(0);
-              });
+    SortRDWidgetItems(members);
 
     for(int i = 0; i < members.count(); i++)
       watchItem->addChild(members[i]);
@@ -4604,6 +4604,7 @@ bool ShaderViewer::updateWatchVariable(RDTreeWidgetItem *watchItem, const RDTree
 
     VariableTag tag = VariableTag(DebugVariableType::Variable, path);
     tag.state = WatchVarState::Valid;
+    tag.offset = watchItem->tag().value<VariableTag>().offset;
     watchItem->setTag(QVariant::fromValue(tag));
 
     return true;
@@ -4803,6 +4804,9 @@ bool ShaderViewer::updateWatchVariable(RDTreeWidgetItem *watchItem, const RDTree
 
   VariableTag tag = VariableTag(DebugVariableType::Variable, path);
   tag.state = WatchVarState::Valid;
+  // Grab the offset that is already set
+  uint32_t offset = watchItem->tag().value<VariableTag>().offset;
+  tag.offset = offset;
   watchItem->setTag(QVariant::fromValue(tag));
 
   return true;
@@ -6969,7 +6973,7 @@ void ShaderViewer::performReplaceAll()
   if(context == FindReplace::File)
     scintillas = {cur};
 
-  int numReplacements = 1;
+  int numReplacements = 0;
 
   for(ScintillaEdit *s : scintillas)
   {

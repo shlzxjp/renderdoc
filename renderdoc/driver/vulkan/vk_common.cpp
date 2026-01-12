@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -431,6 +431,10 @@ void GPUBuffer::WriteDescriptor(VkDescriptorSet unwrappedDescSet, uint32_t destB
 bool VkInitParams::IsSupportedVersion(uint64_t ver)
 {
   if(ver == CurrentVersion)
+    return true;
+
+  // 0x17 -> 0x18 - added IDs generated at capture time for inline shaders
+  if(ver == 0x17)
     return true;
 
   // 0x16 -> 0x17 - added indication of reserved descriptors and descriptor buffer support for swapchains

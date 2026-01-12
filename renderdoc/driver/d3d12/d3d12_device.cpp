@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -809,7 +809,6 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
 
   m_ResourceManager = new D3D12ResourceManager(m_State, this);
 
-  // create a temporary and grab its resource ID
   m_ResourceID = ResourceIDGen::GetNewUniqueID();
 
   m_DeviceRecord = NULL;
@@ -1894,12 +1893,10 @@ bool WrappedID3D12Device::Serialise_WrapSwapchainBuffer(SerialiserType &ser, IDX
     }
     else
     {
-      WrappedID3D12Resource *wrapped = new WrappedID3D12Resource(fakeBB, NULL, 0, this);
+      WrappedID3D12Resource *wrapped = new WrappedID3D12Resource(SwapbufferID, fakeBB, NULL, 0, this);
       fakeBB = wrapped;
 
       fakeBB->SetName(L"Swap Chain Buffer");
-
-      GetResourceManager()->AddLiveResource(SwapbufferID, fakeBB);
 
       m_BackbufferFormat[wrapped->GetResourceID()] = SwapbufferFormat;
 
@@ -1936,7 +1933,7 @@ IUnknown *WrappedID3D12Device::WrapSwapchainBuffer(IDXGISwapper *swapper, DXGI_F
   }
   else
   {
-    pRes = new WrappedID3D12Resource((ID3D12Resource *)realSurface, NULL, 0, this);
+    pRes = new WrappedID3D12Resource(ResourceId(), (ID3D12Resource *)realSurface, NULL, 0, this);
 
     ResourceId id = GetResID(pRes);
 
@@ -1969,12 +1966,6 @@ IUnknown *WrappedID3D12Device::WrapSwapchainBuffer(IDXGISwapper *swapper, DXGI_F
 
         states = {D3D12ResourceLayout::FromStates(D3D12_RESOURCE_STATE_PRESENT)};
       }
-    }
-    else
-    {
-      WrappedID3D12Resource *wrapped = (WrappedID3D12Resource *)pRes;
-
-      GetResourceManager()->AddLiveResource(wrapped->GetResourceID(), wrapped);
     }
   }
 
@@ -2117,11 +2108,11 @@ bool WrappedID3D12Device::Serialise_MapDataWrite(SerialiserType &ser, ID3D12Reso
   // it.
   bool gpuUpload = false;
 
-  ResourceId origid;
+  ResourceId id;
   if(IsReplayingAndReading() && Resource)
   {
-    origid = GetResourceManager()->GetOriginalID(GetResID(Resource));
-    if(m_UploadResourceIds.find(origid) != m_UploadResourceIds.end())
+    id = GetResID(Resource);
+    if(m_UploadResourceIds.find(id) != m_UploadResourceIds.end())
       gpuUpload = true;
   }
 
@@ -2239,7 +2230,7 @@ bool WrappedID3D12Device::Serialise_MapDataWrite(SerialiserType &ser, ID3D12Reso
 
         SetObjName(uploadBuf,
                    StringFormat::Fmt("Map data write, %llu bytes for %s/%u @ %llu", rangeSize,
-                                     ToStr(origid).c_str(), Subresource, cmd.m_CurChunkOffset));
+                                     ToStr(id).c_str(), Subresource, cmd.m_CurChunkOffset));
 
         D3D12_RANGE maprange = {0, 0};
         void *dst = NULL;
@@ -2396,8 +2387,8 @@ bool WrappedID3D12Device::Serialise_WriteToSubresource(SerialiserType &ser, ID3D
     if(IsLoading(m_State))
       cmd.AddCPUUsage(GetResID(Resource), ResourceUsage::CPUWrite);
 
-    ResourceId origid = GetResourceManager()->GetOriginalID(GetResID(Resource));
-    if(m_UploadResourceIds.find(origid) != m_UploadResourceIds.end())
+    ResourceId id = GetResID(Resource);
+    if(m_UploadResourceIds.find(id) != m_UploadResourceIds.end())
     {
       ID3D12Resource *uploadBuf = GetUploadBuffer(cmd.m_CurChunkOffset, dataSize);
 
@@ -3378,9 +3369,9 @@ void WrappedID3D12Device::UploadBLASBufferAddresses()
   for(GPUAddressRange addressRange : m_OrigGPUAddresses.GetAddresses())
   {
     ResourceId resId = addressRange.id;
-    if(resManager->HasLiveResource(resId))
+    if(resManager->HasResource(resId))
     {
-      WrappedID3D12Resource *wrappedRes = (WrappedID3D12Resource *)resManager->GetLiveResource(resId);
+      WrappedID3D12Resource *wrappedRes = (WrappedID3D12Resource *)resManager->GetResource(resId);
       {
         BlasAddressPair addressPair;
         addressPair.oldAddress.start = addressRange.start;
@@ -3517,15 +3508,6 @@ void WrappedID3D12Device::ReleaseResource(ID3D12DeviceChild *res)
 
   if(record)
     record->Delete(GetResourceManager());
-
-  // wrapped resources get released all the time, we don't want to
-  // try and slerp in a resource release. Just the explicit ones
-  if(IsReplayMode(m_State))
-  {
-    if(GetResourceManager()->HasLiveResource(id))
-      GetResourceManager()->EraseLiveResource(id);
-    return;
-  }
 }
 
 HRESULT WrappedID3D12Device::CreatePipeState(D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC &desc,
@@ -3840,7 +3822,7 @@ void WrappedID3D12Device::DumpDRED(D3D12_AUTO_BREADCRUMB_NODE *node,
     ID3D12CommandList *cmd =
         (ID3D12CommandList *)GetResourceManager()->GetWrapper(node->pCommandList);
     if(cmd)
-      cmdName = ToStr(GetResourceManager()->GetOriginalID(GetResID(cmd)));
+      cmdName = ToStr(GetResID(cmd));
   }
 
   if(node->pCommandQueueDebugNameA)
@@ -3853,7 +3835,7 @@ void WrappedID3D12Device::DumpDRED(D3D12_AUTO_BREADCRUMB_NODE *node,
     ID3D12CommandQueue *q =
         (ID3D12CommandQueue *)GetResourceManager()->GetWrapper(node->pCommandList);
     if(q)
-      qName = ToStr(GetResourceManager()->GetOriginalID(GetResID(q)));
+      qName = ToStr(GetResID(q));
   }
 
   uint32_t lastExecuted = *node->pLastBreadcrumbValue;
@@ -4018,9 +4000,9 @@ bool WrappedID3D12Device::Serialise_SetName(SerialiserType &ser, ID3D12DeviceChi
 
   if(IsReplayingAndReading() && pResource)
   {
-    ResourceId origId = GetResourceManager()->GetOriginalID(GetResID(pResource));
+    ResourceId id = GetResID(pResource);
 
-    ResourceDescription &descr = GetReplay()->GetResourceDesc(origId);
+    ResourceDescription &descr = GetReplay()->GetResourceDesc(id);
     if(Name && Name[0])
     {
       descr.SetCustomName(Name);
@@ -4097,18 +4079,14 @@ bool WrappedID3D12Device::Serialise_CreateAS(SerialiserType &ser, ID3D12Resource
   {
     WrappedID3D12Resource *asbWrappedResource = (WrappedID3D12Resource *)pResource;
     D3D12AccelerationStructure *accStructAtOffset = NULL;
-    if(asbWrappedResource->CreateAccStruct(resourceOffset, type, byteSize, ResourceId(),
-                                           &accStructAtOffset))
+    if(asbWrappedResource->CreateAccStruct(asId, resourceOffset, type, byteSize, &accStructAtOffset))
     {
-      GetResourceManager()->AddLiveResource(asId, accStructAtOffset);
-
       if(D3D12_Debug_RT_Auditing())
       {
         RDCLOG("Creating %s AS %s at %s + %llu (%llu bytes): %llx remapped to %llx",
                type == D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL ? "blas" : "tlas",
-               ToStr(asId).c_str(),
-               ToStr(GetResourceManager()->GetOriginalID(GetResID(pResource))).c_str(),
-               resourceOffset, byteSize, asbWrappedResource->GetOriginalVA() + resourceOffset,
+               ToStr(asId).c_str(), ToStr(GetResID(pResource)).c_str(), resourceOffset, byteSize,
+               asbWrappedResource->GetOriginalVA() + resourceOffset,
                accStructAtOffset->GetVirtualAddress());
 
         RDCASSERTEQUAL(accStructAtOffset->GetVirtualAddress(),
@@ -4789,7 +4767,6 @@ ID3D12GraphicsCommandListX *WrappedID3D12Device::GetNewList()
 
     if(IsReplayMode(m_State))
     {
-      GetResourceManager()->AddLiveResource(GetResID(ret), ret);
       // add a reference here so that when we release our internal resources on destruction we don't
       // free this too soon before the resource manager can. We still want to have it tracked as a
       // resource in the manager though.
@@ -5192,7 +5169,7 @@ void WrappedID3D12Device::DerivedResource(ID3D12DeviceChild *parent, ResourceId 
   if(!parent)
     return;
 
-  ResourceId parentId = GetResourceManager()->GetOriginalID(GetResID(parent));
+  ResourceId parentId = GetResID(parent);
 
   DerivedResource(parentId, child);
 }
@@ -5363,7 +5340,7 @@ RDResult WrappedID3D12Device::ReadLogInitialisation(RDCFile *rdc, bool storeStru
 
       if(IsStructuredExporting(m_State))
       {
-        m_Queue = new WrappedID3D12CommandQueue(NULL, this, m_State);
+        m_Queue = new WrappedID3D12CommandQueue(ResourceId(), NULL, this, m_State);
         m_Queues.push_back(m_Queue);
       }
 

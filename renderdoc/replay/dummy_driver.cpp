@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2021-2025 Baldur Karlsson
+ * Copyright (c) 2021-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -214,11 +214,6 @@ void DummyDriver::InitPostVSBuffers(uint32_t eventId)
 
 void DummyDriver::InitPostVSBuffers(const rdcarray<uint32_t> &passEvents)
 {
-}
-
-ResourceId DummyDriver::GetLiveID(ResourceId id)
-{
-  return id;
 }
 
 MeshFormat DummyDriver::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,

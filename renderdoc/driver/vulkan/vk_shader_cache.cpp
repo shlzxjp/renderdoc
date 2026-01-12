@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2018-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -452,16 +452,12 @@ VulkanShaderCache::VulkanShaderCache(WrappedVulkan *driver)
 
     if(vkr == VK_SUCCESS)
     {
-      ResourceId id =
-          m_pDriver->GetResourceManager()->WrapResource(Unwrap(m_Device), m_PipelineCache);
+      ResourceId id = m_pDriver->GetResourceManager()->WrapResource(ResourceId(), Unwrap(m_Device),
+                                                                    m_PipelineCache);
 
       if(IsCaptureMode(m_pDriver->GetState()))
       {
         m_pDriver->GetResourceManager()->AddResourceRecord(m_PipelineCache);
-      }
-      else
-      {
-        m_pDriver->GetResourceManager()->AddLiveResource(id, m_PipelineCache);
       }
     }
   }
@@ -640,7 +636,7 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
     {
       stages[stageCount].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
       stages[stageCount].stage = (VkShaderStageFlagBits)(1 << i);
-      stages[stageCount].module = rm->GetCurrentHandle<VkShaderModule>(pipeInfo.shaders[i].module);
+      stages[stageCount].module = rm->GetHandle<VkShaderModule>(pipeInfo.shaders[i].module);
       stages[stageCount].pName = pipeInfo.shaders[i].entryPoint.c_str();
       stages[stageCount].pNext = NULL;
       stages[stageCount].pSpecializationInfo = NULL;
@@ -992,7 +988,7 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
       &cb,
       &dyn,
       VK_NULL_HANDLE,
-      rm->GetCurrentHandle<VkRenderPass>(pipeInfo.renderpass),
+      rm->GetHandle<VkRenderPass>(pipeInfo.renderpass),
       pipeInfo.subpass,
       VK_NULL_HANDLE,    // base pipeline handle
       0,                 // base pipeline index
@@ -1001,7 +997,7 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
   // if the layouts are the same object (non-library case) we can just use it directly
   if(pipeInfo.vertLayout == pipeInfo.fragLayout)
   {
-    ret.layout = rm->GetCurrentHandle<VkPipelineLayout>(pipeInfo.vertLayout);
+    ret.layout = rm->GetHandle<VkPipelineLayout>(pipeInfo.vertLayout);
   }
   else
   {
@@ -1011,7 +1007,7 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
       rdcarray<VkDescriptorSetLayout> descSetLayouts;
 
       for(ResourceId setLayout : pipeInfo.descSetLayouts)
-        descSetLayouts.push_back(rm->GetCurrentHandle<VkDescriptorSetLayout>(setLayout));
+        descSetLayouts.push_back(rm->GetHandle<VkDescriptorSetLayout>(setLayout));
 
       // don't have to handle separate vert/frag layouts as push constant ranges must be identical
       const VulkanCreationInfo::PipelineLayout &pipeLayoutInfo =
@@ -1177,7 +1173,7 @@ void VulkanShaderCache::MakeComputePipelineInfo(VkComputePipelineCreateInfo &pip
 
   stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   stage.stage = (VkShaderStageFlagBits)(1 << i);
-  stage.module = rm->GetCurrentHandle<VkShaderModule>(pipeInfo.shaders[i].module);
+  stage.module = rm->GetHandle<VkShaderModule>(pipeInfo.shaders[i].module);
   stage.pName = pipeInfo.shaders[i].entryPoint.c_str();
   stage.pNext = NULL;
   stage.pSpecializationInfo = NULL;
@@ -1235,7 +1231,7 @@ void VulkanShaderCache::MakeComputePipelineInfo(VkComputePipelineCreateInfo &pip
       NULL,
       0,
       stage,
-      rm->GetCurrentHandle<VkPipelineLayout>(pipeInfo.compLayout),
+      rm->GetHandle<VkPipelineLayout>(pipeInfo.compLayout),
       VK_NULL_HANDLE,    // base pipeline handle
       0,                 // base pipeline index
   };
@@ -1300,7 +1296,7 @@ void VulkanShaderCache::MakeShaderObjectInfo(VkShaderCreateInfoEXT &shadCreateIn
   descSetLayouts = {};
 
   for(ResourceId setLayout : shadInfo.descSetLayouts)
-    descSetLayouts.push_back(rm->GetCurrentHandle<VkDescriptorSetLayout>(setLayout));
+    descSetLayouts.push_back(rm->GetHandle<VkDescriptorSetLayout>(setLayout));
 
   VkShaderCreateInfoEXT ret = {VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
                                NULL,

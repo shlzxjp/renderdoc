@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -2636,7 +2636,7 @@ uint32_t GLReplay::PickVertex(uint32_t eventId, int32_t width, int32_t height,
     idxclamp = uint32_t(-cfg.position.baseVertex);
 
   if(cfg.position.indexByteStride && cfg.position.indexResourceId != ResourceId())
-    ib = m_pDriver->GetResourceManager()->GetCurrentResource(cfg.position.indexResourceId).name;
+    ib = m_pDriver->GetResourceManager()->GetResource(cfg.position.indexResourceId).name;
 
   const bool fandecode =
       (cfg.position.topology == Topology::TriangleFan && cfg.position.allowRestart);

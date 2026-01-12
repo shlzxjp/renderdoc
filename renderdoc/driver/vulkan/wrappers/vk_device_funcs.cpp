@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -503,19 +503,13 @@ RDResult WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVersion
 
   RDCASSERTEQUAL(ret, VK_SUCCESS);
 
-  GetResourceManager()->WrapResource(m_Instance, m_Instance);
+  GetResourceManager()->WrapResource(params.InstanceID, m_Instance, m_Instance);
 
   // we'll add the chunk later when we re-process it.
   if(params.InstanceID != ResourceId())
   {
-    GetResourceManager()->AddLiveResource(params.InstanceID, m_Instance);
-
     AddResource(params.InstanceID, ResourceType::Device, "Instance");
     GetReplay()->GetResourceDesc(params.InstanceID).initialisationChunks.clear();
-  }
-  else
-  {
-    GetResourceManager()->AddLiveResource(GetResID(m_Instance), m_Instance);
   }
 
   InitInstanceExtensionTables(m_Instance, &m_EnabledExtensions);
@@ -575,8 +569,11 @@ RDResult WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVersion
             ->EnumeratePhysicalDevices(Unwrap(m_Instance), &count, &m_ReplayPhysicalDevices[0]);
   CHECK_VKR(this, vkr);
 
+  // these are only used internally, since due to physical device remapping the actual registered
+  // resource is created as a fake physical device and that's where we register them by their
+  // capture-time ID. These can safely be created with replay-only IDs.
   for(uint32_t i = 0; i < count; i++)
-    GetResourceManager()->WrapResource(m_Instance, m_ReplayPhysicalDevices[i]);
+    GetResourceManager()->WrapResource(ResourceId(), m_Instance, m_ReplayPhysicalDevices[i]);
 
 #if ENABLED(RDOC_WIN32)
   if(GetModuleHandleA("nvoglv64.dll"))
@@ -848,7 +845,7 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
   InitInstanceTable(m_Instance, gpa);
 
-  GetResourceManager()->WrapResource(m_Instance, m_Instance);
+  GetResourceManager()->WrapResource(ResourceId(), m_Instance, m_Instance);
 
   *pInstance = m_Instance;
 
@@ -1061,7 +1058,10 @@ void WrappedVulkan::Shutdown()
   // destroy the physical devices manually because due to remapping the may have leftover
   // refcounts
   for(size_t i = 0; i < m_ReplayPhysicalDevices.size(); i++)
-    GetResourceManager()->ReleaseWrappedResource(m_ReplayPhysicalDevices[i]);
+  {
+    if(m_ReplayPhysicalDevices[i] != VK_NULL_HANDLE)
+      GetResourceManager()->ReleaseWrappedResource(m_ReplayPhysicalDevices[i]);
+  }
 
   m_ASManager->Cleanup();
 
@@ -1460,24 +1460,21 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
 
     pd = m_ReplayPhysicalDevices[bestIdx];
 
+    // we want to preserve the separate physical devices until we actually need the real handle,
+    // so don't remap multiple capture-time physical devices to one replay-time physical device
+    // yet. See below in Serialise_vkCreateDevice where this is decoded.
+    // Note this allocation is pooled so we don't have to explicitly delete it.
     {
       VkPhysicalDevice fakeDevice = MakePhysicalDeviceHandleFromIndex(PhysicalDeviceIndex);
 
-      ResourceId id = ResourceIDGen::GetNewUniqueID();
-      WrappedVkPhysicalDevice *wrapped = new WrappedVkPhysicalDevice(fakeDevice, id);
+      WrappedVkPhysicalDevice *wrapped = new WrappedVkPhysicalDevice(fakeDevice, PhysicalDevice);
 
-      GetResourceManager()->AddCurrentResource(id, wrapped);
+      GetResourceManager()->AddResource(PhysicalDevice, wrapped);
 
       if(IsReplayMode(m_State))
         GetResourceManager()->AddWrapper(wrapped, ToTypedHandle(fakeDevice));
 
       fakeDevice = (VkPhysicalDevice)wrapped;
-
-      // we want to preserve the separate physical devices until we actually need the real handle,
-      // so don't remap multiple capture-time physical devices to one replay-time physical device
-      // yet. See below in Serialise_vkCreateDevice where this is decoded.
-      // Note this allocation is pooled so we don't have to explicitly delete it.
-      GetResourceManager()->AddLiveResource(PhysicalDevice, fakeDevice);
     }
 
     AddResource(PhysicalDevice, ResourceType::Device, "Physical Device");
@@ -1532,7 +1529,7 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
     }
     else
     {
-      GetResourceManager()->WrapResource(instance, devices[i]);
+      GetResourceManager()->WrapResource(ResourceId(), instance, devices[i]);
 
       if(IsCaptureMode(m_State))
       {
@@ -1722,7 +1719,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
   if(IsReplayingAndReading())
   {
     // kept around only to call DerivedResource below, as this is the resource that actually has an
-    // original resource ID.
+    // capture time resource ID.
     VkPhysicalDevice origPhysDevice = physicalDevice;
 
     // see above in Serialise_vkEnumeratePhysicalDevices where this is encoded
@@ -4239,8 +4236,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       return false;
     }
 
-    GetResourceManager()->WrapResource(device, device);
-    GetResourceManager()->AddLiveResource(Device, device);
+    GetResourceManager()->WrapResource(Device, device, device);
 
     AddResource(Device, ResourceType::Device, "Device");
     DerivedResource(origPhysDevice, Device);
@@ -4340,7 +4336,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
                                                &m_InternalCmds.cmdpool);
       CHECK_VKR(this, vkr);
 
-      GetResourceManager()->WrapResource(Unwrap(device), m_InternalCmds.cmdpool);
+      GetResourceManager()->WrapResource(ResourceId(), Unwrap(device), m_InternalCmds.cmdpool);
     }
 
     // for each queue family we've remapped to, ensure we have a command pool and command buffer on
@@ -4368,7 +4364,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
                                                &m_ExternalQueues[qidx].pool);
       CHECK_VKR(this, vkr);
 
-      GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].pool);
+      GetResourceManager()->WrapResource(ResourceId(), Unwrap(device), m_ExternalQueues[qidx].pool);
 
       VkCommandBufferAllocateInfo cmdInfo = {
           VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -4393,7 +4389,8 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
         else
           SetDispatchTableOverMagicNumber(device, m_ExternalQueues[qidx].ring[x].acquire);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].acquire);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].acquire);
 
         vkr = ObjDisp(device)->AllocateCommandBuffers(Unwrap(device), &cmdInfo,
                                                       &m_ExternalQueues[qidx].ring[x].release);
@@ -4404,25 +4401,29 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
         else
           SetDispatchTableOverMagicNumber(device, m_ExternalQueues[qidx].ring[x].release);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].release);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].release);
 
         vkr = ObjDisp(device)->CreateSemaphore(Unwrap(device), &semInfo, NULL,
                                                &m_ExternalQueues[qidx].ring[x].fromext);
         CHECK_VKR(this, vkr);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].fromext);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].fromext);
 
         vkr = ObjDisp(device)->CreateSemaphore(Unwrap(device), &semInfo, NULL,
                                                &m_ExternalQueues[qidx].ring[x].toext);
         CHECK_VKR(this, vkr);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].toext);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].toext);
 
         vkr = ObjDisp(device)->CreateFence(Unwrap(device), &fenceInfo, NULL,
                                            &m_ExternalQueues[qidx].ring[x].fence);
         CHECK_VKR(this, vkr);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].fence);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].fence);
       }
     }
 
@@ -4942,7 +4943,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
     RDCLOG("Created capture device from physical device %d",
            m_PhysicalDevices.indexOf(physicalDevice));
 
-    ResourceId id = GetResourceManager()->WrapResource(*pDevice, *pDevice);
+    ResourceId id = GetResourceManager()->WrapResource(ResourceId(), *pDevice, *pDevice);
 
     if(IsCaptureMode(m_State))
     {
@@ -5013,10 +5014,6 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
       InitDeviceExtensionTables(*pDevice, record->instDevInfo);
     }
-    else
-    {
-      GetResourceManager()->AddLiveResource(id, *pDevice);
-    }
 
     VkDevice device = *pDevice;
 
@@ -5036,7 +5033,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
                                                &m_InternalCmds.cmdpool);
       CHECK_VKR(this, vkr);
 
-      GetResourceManager()->WrapResource(Unwrap(device), m_InternalCmds.cmdpool);
+      GetResourceManager()->WrapResource(ResourceId(), Unwrap(device), m_InternalCmds.cmdpool);
     }
 
     // for each queue family that isn't our own, create a command pool and command buffer on that
@@ -5063,7 +5060,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
                                                &m_ExternalQueues[qidx].pool);
       CHECK_VKR(this, vkr);
 
-      GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].pool);
+      GetResourceManager()->WrapResource(ResourceId(), Unwrap(device), m_ExternalQueues[qidx].pool);
 
       VkCommandBufferAllocateInfo cmdInfo = {
           VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -5088,7 +5085,8 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
         else
           SetDispatchTableOverMagicNumber(device, m_ExternalQueues[qidx].ring[x].acquire);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].acquire);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].acquire);
 
         vkr = ObjDisp(device)->AllocateCommandBuffers(Unwrap(device), &cmdInfo,
                                                       &m_ExternalQueues[qidx].ring[x].release);
@@ -5099,25 +5097,29 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
         else
           SetDispatchTableOverMagicNumber(device, m_ExternalQueues[qidx].ring[x].release);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].release);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].release);
 
         vkr = ObjDisp(device)->CreateSemaphore(Unwrap(device), &semInfo, NULL,
                                                &m_ExternalQueues[qidx].ring[x].fromext);
         CHECK_VKR(this, vkr);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].fromext);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].fromext);
 
         vkr = ObjDisp(device)->CreateSemaphore(Unwrap(device), &semInfo, NULL,
                                                &m_ExternalQueues[qidx].ring[x].toext);
         CHECK_VKR(this, vkr);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].toext);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].toext);
 
         vkr = ObjDisp(device)->CreateFence(Unwrap(device), &fenceInfo, NULL,
                                            &m_ExternalQueues[qidx].ring[x].fence);
         CHECK_VKR(this, vkr);
 
-        GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].ring[x].fence);
+        GetResourceManager()->WrapResource(ResourceId(), Unwrap(device),
+                                           m_ExternalQueues[qidx].ring[x].fence);
       }
     }
 

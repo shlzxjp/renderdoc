@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2025 Baldur Karlsson
+ * Copyright (c) 2025-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -123,7 +123,7 @@ public:
           m_SamplerDescriptors.append(replay->GetSamplerDescriptors(store, ranges));
         }
 
-        store = replay->GetLiveID(acc.descriptorStore);
+        store = acc.descriptorStore;
         ranges.clear();
       }
 
@@ -677,10 +677,10 @@ public:
 
     GLMarkerRegion markerRegion("QueueSampleGather");
 
-    GLResource texture = m_pDriver->GetResourceManager()->GetLiveResource(imageDescriptor.resource);
+    GLResource texture = m_pDriver->GetResourceManager()->GetResource(imageDescriptor.resource);
     GLResource bufTexture =
-        m_pDriver->GetResourceManager()->GetLiveResource(bufferViewDescriptor.resource);
-    GLResource sampler = m_pDriver->GetResourceManager()->GetLiveResource(samplerDescriptor.object);
+        m_pDriver->GetResourceManager()->GetResource(bufferViewDescriptor.resource);
+    GLResource sampler = m_pDriver->GetResourceManager()->GetResource(samplerDescriptor.object);
 
     // NULL texture : return 0,0,0,0
     if(!buffer && (texture.name == 0))
@@ -690,8 +690,7 @@ public:
       return true;
     }
 
-    WrappedOpenGL::TextureData &texDetails =
-        m_pDriver->m_Textures[m_pDriver->GetResourceManager()->GetLiveID(imageDescriptor.resource)];
+    WrappedOpenGL::TextureData &texDetails = m_pDriver->m_Textures[imageDescriptor.resource];
 
     SamplingProgramConfig config;
 
@@ -1684,9 +1683,8 @@ private:
 
       if(bufData.resource != ResourceId())
       {
-        m_pDriver->GetReplay()->GetBufferData(
-            m_pDriver->GetResourceManager()->GetLiveID(bufData.resource), bufData.byteOffset,
-            bufData.byteSize, data);
+        m_pDriver->GetReplay()->GetBufferData(bufData.resource, bufData.byteOffset,
+                                              bufData.byteSize, data);
       }
     }
 
@@ -1719,7 +1717,7 @@ private:
       if(imgData.type == DescriptorType::TypedBuffer ||
          imgData.type == DescriptorType::ReadWriteTypedBuffer)
       {
-        ResourceId buffer = m_pDriver->GetResourceManager()->GetLiveID(imgData.resource);
+        ResourceId buffer = imgData.resource;
         uint64_t offset = imgData.byteOffset;
         GLenum format = MakeGLFormat(imgData.format);
         uint64_t byteWidth = imgData.byteSize;
@@ -1734,13 +1732,11 @@ private:
 
         data.samplePitch = data.slicePitch = data.rowPitch = data.width * data.texelSize;
 
-        m_pDriver->GetReplay()->GetBufferData(
-            m_pDriver->GetResourceManager()->GetLiveID(imgData.resource), offset, data.rowPitch,
-            data.bytes);
+        m_pDriver->GetReplay()->GetBufferData(imgData.resource, offset, data.rowPitch, data.bytes);
       }
       else if(imgData.resource != ResourceId())
       {
-        ResourceId id = m_pDriver->GetResourceManager()->GetLiveID(imgData.resource);
+        ResourceId id = imgData.resource;
         const WrappedOpenGL::TextureData &texProps = m_pDriver->m_Textures[id];
 
         uint32_t mip = imgData.firstMip;
@@ -2798,7 +2794,7 @@ uint32_t GetStorageBufferBinding(WrappedOpenGL *driver,
 
     const ShaderReflection *refl = driver->GetShader(stageShaders[i]).GetReflection();
 
-    GLuint prog = driver->GetResourceManager()->GetCurrentResource(stagePrograms[i]).name;
+    GLuint prog = driver->GetResourceManager()->GetResource(stagePrograms[i]).name;
 
     for(const ShaderResource &res : refl->readWriteResources)
     {
@@ -2879,7 +2875,7 @@ ShaderDebugTrace *GLReplay::DebugVertex(uint32_t eventId, uint32_t vertid, uint3
     const WrappedOpenGL::PipelineData &pipeDetails = m_pDriver->GetPipeline(id);
 
     prog = m_pDriver->GetResourceManager()
-               ->GetCurrentResource(pipeDetails.stagePrograms[(uint32_t)ShaderStage::Vertex])
+               ->GetResource(pipeDetails.stagePrograms[(uint32_t)ShaderStage::Vertex])
                .name;
 
     vert = pipeDetails.stageShaders[(uint32_t)ShaderStage::Vertex];

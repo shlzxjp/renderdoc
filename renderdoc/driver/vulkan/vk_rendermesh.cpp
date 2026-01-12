@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2018-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -449,7 +449,7 @@ VKMeshDisplayPipelines VulkanDebugManager::CacheMeshDisplayPipelines(VkPipelineL
 
   for(uint32_t i = 0; i < VKMeshDisplayPipelines::ePipe_Count; i++)
     if(cache.pipes[i] != VK_NULL_HANDLE)
-      m_pDriver->GetResourceManager()->WrapResource(Unwrap(m_Device), cache.pipes[i]);
+      m_pDriver->GetResourceManager()->WrapResource(ResourceId(), Unwrap(m_Device), cache.pipes[i]);
 
   vt->DestroyRenderPass(Unwrap(m_Device), rp, NULL);
 
@@ -627,8 +627,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const rdcarray<MeshFormat> &seco
         vt->CmdBindPipeline(Unwrap(cmd), VK_PIPELINE_BIND_POINT_GRAPHICS,
                             Unwrap(secondaryCache.pipes[VKMeshDisplayPipelines::ePipe_WireDepth]));
 
-        VkBuffer vb =
-            m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(fmt.vertexResourceId);
+        VkBuffer vb = m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(fmt.vertexResourceId);
 
         VkDeviceSize offs = fmt.vertexByteOffset - secondaryCache.primaryStridePadding;
         vt->CmdBindVertexBuffers(Unwrap(cmd), 0, 1, UnwrapPtr(vb), &offs);
@@ -643,8 +642,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const rdcarray<MeshFormat> &seco
 
           if(fmt.indexResourceId != ResourceId())
           {
-            VkBuffer ib =
-                m_pDriver->GetResourceManager()->GetLiveHandle<VkBuffer>(fmt.indexResourceId);
+            VkBuffer ib = m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(fmt.indexResourceId);
 
             const VulkanCreationInfo::Buffer &bufProps =
                 m_pDriver->m_CreationInfo.m_Buffer[fmt.indexResourceId];
@@ -688,8 +686,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const rdcarray<MeshFormat> &seco
 
   if(cfg.position.vertexResourceId != ResourceId())
   {
-    VkBuffer vb =
-        m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(cfg.position.vertexResourceId);
+    VkBuffer vb = m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(cfg.position.vertexResourceId);
 
     VkDeviceSize offs = cfg.position.vertexByteOffset;
 
@@ -705,8 +702,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const rdcarray<MeshFormat> &seco
 
   if(finalVisualisation == Visualisation::Secondary)
   {
-    VkBuffer vb =
-        m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(cfg.second.vertexResourceId);
+    VkBuffer vb = m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(cfg.second.vertexResourceId);
 
     VkDeviceSize offs = cfg.second.vertexByteOffset;
 
@@ -809,7 +805,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const rdcarray<MeshFormat> &seco
       if(cfg.position.indexResourceId != ResourceId())
       {
         VkBuffer ib =
-            m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(cfg.position.indexResourceId);
+            m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(cfg.position.indexResourceId);
 
         const VulkanCreationInfo::Buffer &bufProps =
             m_pDriver->m_CreationInfo.m_Buffer[cfg.position.indexResourceId];
@@ -860,7 +856,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const rdcarray<MeshFormat> &seco
       if(cfg.position.indexResourceId != ResourceId())
       {
         VkBuffer ib =
-            m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(cfg.position.indexResourceId);
+            m_pDriver->GetResourceManager()->GetHandle<VkBuffer>(cfg.position.indexResourceId);
 
         const VulkanCreationInfo::Buffer &bufProps =
             m_pDriver->m_CreationInfo.m_Buffer[cfg.position.indexResourceId];

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -215,7 +215,7 @@ class WrappedID3D12CommandQueue : public ID3D12CommandQueue1,
 public:
   ALLOCATE_WITH_WRAPPED_POOL(WrappedID3D12CommandQueue);
 
-  WrappedID3D12CommandQueue(ID3D12CommandQueue *real, WrappedID3D12Device *device,
+  WrappedID3D12CommandQueue(ResourceId id, ID3D12CommandQueue *real, WrappedID3D12Device *device,
                             CaptureState &state);
   virtual ~WrappedID3D12CommandQueue();
 

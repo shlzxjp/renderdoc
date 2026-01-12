@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -493,7 +493,7 @@ HRESULT STDMETHODCALLTYPE WrappedDownlevelQueue::Present(ID3D12GraphicsCommandLi
   return m_pQueue.Present(pOpenCommandList, pSourceTex2D, hWindow, Flags);
 }
 
-WrappedID3D12CommandQueue::WrappedID3D12CommandQueue(ID3D12CommandQueue *real,
+WrappedID3D12CommandQueue::WrappedID3D12CommandQueue(ResourceId id, ID3D12CommandQueue *real,
                                                      WrappedID3D12Device *device, CaptureState &state)
     : RefCounter12(real),
       m_pDevice(device),
@@ -519,13 +519,14 @@ WrappedID3D12CommandQueue::WrappedID3D12CommandQueue(ID3D12CommandQueue *real,
 
   if(RenderDoc::Inst().IsReplayApp())
   {
-    m_ReplayList = new WrappedID3D12GraphicsCommandList(NULL, m_pDevice, state);
+    m_ReplayList = new WrappedID3D12GraphicsCommandList(ResourceId(), NULL, m_pDevice, state);
 
     m_ReplayList->SetCommandData(&m_Cmd);
   }
 
-  // create a temporary and grab its resource ID
-  m_ResourceID = ResourceIDGen::GetNewUniqueID();
+  if(id == ResourceId())
+    id = ResourceIDGen::GetNewUniqueID();
+  m_ResourceID = id;
 
   m_QueueRecord = NULL;
   m_CreationRecord = NULL;
@@ -550,7 +551,7 @@ WrappedID3D12CommandQueue::WrappedID3D12CommandQueue(ID3D12CommandQueue *real,
     m_CreationRecord->InternalResource = true;
   }
 
-  m_pDevice->GetResourceManager()->AddCurrentResource(GetResourceID(), this);
+  m_pDevice->GetResourceManager()->AddResource(GetResourceID(), this);
 
   m_pDevice->SoftRef();
 }
@@ -566,7 +567,7 @@ WrappedID3D12CommandQueue::~WrappedID3D12CommandQueue()
 
   if(m_QueueRecord)
     m_QueueRecord->Delete(m_pDevice->GetResourceManager());
-  m_pDevice->GetResourceManager()->ReleaseCurrentResource(GetResourceID());
+  m_pDevice->GetResourceManager()->ReleaseResource(GetResourceID());
   m_pDevice->RemoveQueue(this);
 
   SAFE_RELEASE(m_pDownlevel);
@@ -1119,6 +1120,14 @@ RDResult WrappedID3D12CommandQueue::ReplayLog(CaptureState readType, uint32_t st
 {
   m_State = readType;
 
+  if(!partial)
+  {
+    for(size_t i = 0; i < m_Cmd.m_RerecordCmdList.size(); i++)
+      SAFE_RELEASE(m_Cmd.m_RerecordCmdList[i]);
+
+    m_Cmd.m_RerecordCmdList.clear();
+  }
+
   if(!m_FrameReader)
   {
     RETURN_ERROR_RESULT(ResultCode::InvalidParameter,
@@ -1328,16 +1337,13 @@ RDResult WrappedID3D12CommandQueue::ReplayLog(CaptureState readType, uint32_t st
 
   m_StructuredFile = NULL;
 
-  for(size_t i = 0; i < m_Cmd.m_RerecordCmdList.size(); i++)
-    SAFE_RELEASE(m_Cmd.m_RerecordCmdList[i]);
-
   m_Cmd.m_RerecordCmds.clear();
-  m_Cmd.m_RerecordCmdList.clear();
 
   return ResultCode::Succeeded;
 }
 
-WrappedID3D12GraphicsCommandList::WrappedID3D12GraphicsCommandList(ID3D12GraphicsCommandList *real,
+WrappedID3D12GraphicsCommandList::WrappedID3D12GraphicsCommandList(ResourceId id,
+                                                                   ID3D12GraphicsCommandList *real,
                                                                    WrappedID3D12Device *device,
                                                                    CaptureState &state)
     : m_RefCounter(real, false), m_pList(real), m_pDevice(device), m_State(state)
@@ -1370,8 +1376,9 @@ WrappedID3D12GraphicsCommandList::WrappedID3D12GraphicsCommandList(ID3D12Graphic
     m_pList->QueryInterface(__uuidof(ID3D12GraphicsCommandList10), (void **)&m_pList10);
   }
 
-  // create a temporary and grab its resource ID
-  m_ResourceID = ResourceIDGen::GetNewUniqueID();
+  m_ResourceID = id;
+  if(id == ResourceId())
+    m_ResourceID = ResourceIDGen::GetNewUniqueID();
 
   RDCEraseEl(m_Init);
 
@@ -1418,7 +1425,7 @@ WrappedID3D12GraphicsCommandList::WrappedID3D12GraphicsCommandList(ID3D12Graphic
       RDCERR("Error adding wrapper for ID3D12GraphicsCommandList");
   }
 
-  m_pDevice->GetResourceManager()->AddCurrentResource(GetResourceID(), this);
+  m_pDevice->GetResourceManager()->AddResource(GetResourceID(), this);
 
   m_pDevice->SoftRef();
 }
@@ -1443,7 +1450,7 @@ WrappedID3D12GraphicsCommandList::~WrappedID3D12GraphicsCommandList()
   if(m_ListRecord)
     m_ListRecord->Delete(m_pDevice->GetResourceManager());
 
-  m_pDevice->GetResourceManager()->ReleaseCurrentResource(GetResourceID());
+  m_pDevice->GetResourceManager()->ReleaseResource(GetResourceID());
 
   SAFE_RELEASE(m_WrappedDebug.m_pReal);
   SAFE_RELEASE(m_WrappedDebug.m_pReal1);
@@ -2052,7 +2059,7 @@ void D3D12CommandData::AddUsageForBindInRootSig(const D3D12RenderState &state,
 
   D3D12ResourceManager *rm = m_pDevice->GetResourceManager();
 
-  WrappedID3D12RootSignature *sig = rm->GetCurrentAs<WrappedID3D12RootSignature>(rootsig->rootsig);
+  WrappedID3D12RootSignature *sig = rm->GetResAs<WrappedID3D12RootSignature>(rootsig->rootsig);
 
   for(size_t rootEl = 0; rootEl < sig->sig.Parameters.size(); rootEl++)
   {
@@ -2124,7 +2131,7 @@ void D3D12CommandData::AddUsageForBindInRootSig(const D3D12RenderState &state,
     else if(p.ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE && el.type == eRootTable)
     {
       WrappedID3D12DescriptorHeap *heap =
-          m_pDevice->GetResourceManager()->GetCurrentAs<WrappedID3D12DescriptorHeap>(el.id);
+          m_pDevice->GetResourceManager()->GetResAs<WrappedID3D12DescriptorHeap>(el.id);
 
       if(heap == NULL)
         continue;
@@ -2236,7 +2243,7 @@ void D3D12CommandData::AddUsage(const D3D12RenderState &state, D3D12ActionTreeNo
   WrappedID3D12PipelineState *pipe = NULL;
 
   if(state.pipe != ResourceId())
-    pipe = rm->GetCurrentAs<WrappedID3D12PipelineState>(state.pipe);
+    pipe = rm->GetResAs<WrappedID3D12PipelineState>(state.pipe);
 
   const ShaderReflection *refls[NumShaderStages] = {};
 
@@ -2373,13 +2380,12 @@ void D3D12CommandData::AddAction(const ActionDescription &a)
     for(size_t i = 0; i < ARRAY_COUNT(action.outputs); i++)
     {
       if(i < rts.size())
-        action.outputs[i] = m_pDevice->GetResourceManager()->GetOriginalID(rts[i]);
+        action.outputs[i] = rts[i];
       else
         action.outputs[i] = ResourceId();
     }
 
-    action.depthOut = m_pDevice->GetResourceManager()->GetOriginalID(
-        m_BakedCmdListInfo[m_LastCmdListID].state.GetDSVID());
+    action.depthOut = m_BakedCmdListInfo[m_LastCmdListID].state.GetDSVID();
   }
 
   // markers don't increment action ID

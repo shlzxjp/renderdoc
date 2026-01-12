@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2017-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -43,8 +43,8 @@ void DoSerialiseViaResourceId(SerialiserType &ser, Interface *&el)
 
   if(ser.IsReading())
   {
-    if(id != ResourceId() && rm && rm->HasLiveResource(id))
-      el = (Interface *)rm->GetLiveResource(id);
+    if(id != ResourceId() && rm && rm->HasResource(id))
+      el = (Interface *)rm->GetResource(id);
     else
       el = NULL;
   }

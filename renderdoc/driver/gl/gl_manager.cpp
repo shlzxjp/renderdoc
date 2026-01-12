@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -67,7 +67,7 @@ void GLResourceManager::MarkFBOReferenced(GLResource res, FrameRefType ref)
   if(res.name == 0)
     return;
 
-  rdcpair<ResourceId, GLResourceRecord *> &it = m_CurrentResources[res];
+  rdcpair<ResourceId, GLResourceRecord *> &it = m_Resources[res];
 
   MarkResourceFrameReferenced(it.first, ref);
 
@@ -194,7 +194,7 @@ void GLResourceManager::SetInternalResource(GLResource res)
 
 bool GLResourceManager::ResourceTypeRelease(GLResource res)
 {
-  if(HasCurrentResource(res))
+  if(HasResource(res))
     UnregisterResource(res);
 
   if(res.name)

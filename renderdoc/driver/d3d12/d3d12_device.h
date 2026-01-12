@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -64,7 +64,7 @@ struct D3D12InitParams
   UINT SDKVersion = 0;
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x15;
+  static const uint64_t CurrentVersion = 0x16;
 
   static bool IsSupportedVersion(uint64_t ver);
 };
@@ -1458,6 +1458,11 @@ public:
                                        ID3D12CommandAllocator *pCommandAllocator,
                                        ID3D12PipelineState *pInitialState, REFIID riid,
                                        void **ppCommandList);
+
+  ResourceId m_NextListID;
+  HRESULT CreateCommandList(ResourceId id, UINT nodeMask, D3D12_COMMAND_LIST_TYPE type,
+                            ID3D12CommandAllocator *pCommandAllocator,
+                            ID3D12PipelineState *pInitialState, REFIID riid, void **ppCommandList);
 
   IMPLEMENT_FUNCTION_THREAD_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, CheckFeatureSupport,
                                        D3D12_FEATURE Feature, void *pFeatureSupportData,

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2016-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -543,6 +543,10 @@ bool D3D12InitParams::IsSupportedVersion(uint64_t ver)
 
   // 0x14 -> 0x15 - Add serialisation of new root signature blob in PSO desc
   if(ver == 0x14)
+    return true;
+
+  // 0x15 -> 0x16 - added IDs generated at capture time for shaders in pipelines
+  if(ver == 0x15)
     return true;
 
   return false;

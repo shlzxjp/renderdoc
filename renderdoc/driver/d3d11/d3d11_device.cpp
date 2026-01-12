@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -1035,7 +1035,7 @@ bool WrappedID3D11Device::ProcessChunk(ReadSerialiser &ser, D3D11Chunk context)
       if(IsReplayingAndReading())
       {
         m_pImmediateContext->AddRef();
-        m_ResourceManager->AddLiveResource(ImmediateContext, m_pImmediateContext);
+        m_pImmediateContext->SetReplayResourceID(ImmediateContext);
 
         ResourceId descId = m_pImmediateContext->GetDescriptorsID();
         AddResource(descId, ResourceType::DescriptorStore, "");
@@ -1463,6 +1463,8 @@ RDResult WrappedID3D11Device::ReadLogInitialisation(RDCFile *rdc, bool storeStru
 
       if(!IsStructuredExporting(m_State))
       {
+        GetReplay()->CreateResources();
+
         rdcarray<DebugMessage> savedDebugMessages;
 
         // save any debug messages we built up
@@ -1506,7 +1508,7 @@ RDResult WrappedID3D11Device::ReadLogInitialisation(RDCFile *rdc, bool storeStru
     for(const BufferDescription &b : counterBuffers)
     {
       ID3D11UnorderedAccessView *uav = GetDebugManager()->GetCounterBufferUAV(b.resourceId);
-      ResourceId uavId = GetResourceManager()->GetOriginalID(GetIDForDeviceChild(uav));
+      ResourceId uavId = GetIDForDeviceChild(uav);
 
       ResourceDescription &uavDesc = GetReplay()->GetResourceDesc(uavId);
       ResourceDescription &bufDesc = GetReplay()->GetResourceDesc(b.resourceId);
@@ -1725,14 +1727,12 @@ bool WrappedID3D11Device::Serialise_WrapSwapchainBuffer(SerialiserType &ser, IDX
     else
     {
       WrappedID3D11Texture2D1 *wrapped =
-          new WrappedID3D11Texture2D1(fakeBB, this, TEXDISPLAY_INDIRECT_VIEW);
+          new WrappedID3D11Texture2D1(SwapbufferID, fakeBB, this, TEXDISPLAY_INDIRECT_VIEW);
       fakeBB = wrapped;
 
       wrapped->m_RealDescriptor = new D3D11_TEXTURE2D_DESC(realDescriptor);
 
       SetDebugName(fakeBB, "Serialised Swap Chain Buffer");
-
-      GetResourceManager()->AddLiveResource(SwapbufferID, fakeBB);
     }
   }
 
@@ -1758,7 +1758,8 @@ IUnknown *WrappedID3D11Device::WrapSwapchainBuffer(IDXGISwapper *swapper, DXGI_F
   }
   else
   {
-    pTex = new WrappedID3D11Texture2D1((ID3D11Texture2D *)realSurface, this, TEXDISPLAY_UNKNOWN);
+    pTex = new WrappedID3D11Texture2D1(ResourceId(), (ID3D11Texture2D *)realSurface, this,
+                                       TEXDISPLAY_UNKNOWN);
 
     // this is only used to indicate that this texture is a backbuffer
     pTex->m_RealDescriptor = new D3D11_TEXTURE2D_DESC();
@@ -1795,10 +1796,6 @@ IUnknown *WrappedID3D11Device::WrapSwapchainBuffer(IDXGISwapper *swapper, DXGI_F
       Serialise_WrapSwapchainBuffer(ser, swapper, bufferFormat, buffer, pTex);
 
       record->AddChunk(scope.Get());
-    }
-    else
-    {
-      GetResourceManager()->AddLiveResource(id, pTex);
     }
   }
 
@@ -1951,13 +1948,10 @@ void WrappedID3D11Device::DestroyDeadObject(ID3D11DeviceChild *child)
 
     // clean up book-keeping
     rm->RemoveWrapper(wrapped->GetReal());
-    rm->ReleaseCurrentResource(id);
+    rm->ReleaseResource(id);
     D3D11ResourceRecord *record = GetResourceManager()->GetResourceRecord(id);
     if(record)
       record->Delete(GetResourceManager());
-
-    if(GetResourceManager()->HasLiveResource(id))
-      GetResourceManager()->EraseLiveResource(id);
 
     // this is a bit of a hack. the vtable for e.g. a wrapped blend state will have:
     //
@@ -2858,13 +2852,13 @@ void WrappedID3D11Device::AddResourceCurChunk(ResourceDescription &descr)
 
 void WrappedID3D11Device::AddResourceCurChunk(ResourceId id)
 {
-  if(GetResourceManager()->HasLiveResource(id))
+  if(GetResourceManager()->HasResource(id))
     AddResourceCurChunk(GetReplay()->GetResourceDesc(id));
 }
 
 void WrappedID3D11Device::DerivedResource(ID3D11DeviceChild *parent, ResourceId child)
 {
-  ResourceId parentId = GetResourceManager()->GetOriginalID(GetIDForDeviceChild(parent));
+  ResourceId parentId = GetIDForDeviceChild(parent);
 
   if(GetReplay()->GetResourceDesc(parentId).derivedResources.contains(child))
     return;
@@ -2884,7 +2878,7 @@ bool WrappedID3D11Device::Serialise_SetShaderDebugPath(SerialiserType &ser,
 
   if(IsReplayingAndReading() && pResource)
   {
-    ResourceId resId = GetResourceManager()->GetOriginalID(GetIDForDeviceChild(pResource));
+    ResourceId resId = GetIDForDeviceChild(pResource);
 
     AddResourceCurChunk(resId);
 
@@ -2937,8 +2931,7 @@ bool WrappedID3D11Device::Serialise_SetResourceName(SerialiserType &ser,
 
   if(IsReplayingAndReading() && pResource)
   {
-    ResourceDescription &descr = GetReplay()->GetResourceDesc(
-        GetResourceManager()->GetOriginalID(GetIDForDeviceChild(pResource)));
+    ResourceDescription &descr = GetReplay()->GetResourceDesc(GetIDForDeviceChild(pResource));
     if(Name && Name[0])
       descr.SetCustomName(Name);
     AddResourceCurChunk(descr);

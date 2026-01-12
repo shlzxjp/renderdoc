@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -61,7 +61,7 @@ struct VkInitParams
   uint64_t GetSerialiseSize();
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x17;
+  static const uint64_t CurrentVersion = 0x18;
   static bool IsSupportedVersion(uint64_t ver);
 };
 
@@ -981,8 +981,8 @@ private:
   // so we just set this command buffer
   VkCommandBuffer m_OutsideCmdBuffer = VK_NULL_HANDLE;
 
-  // stores the currently re-recording command buffer for any original command buffer ID (not bake
-  // ID). This allows a quick check to see if an original command should be recorded, and also to
+  // stores the currently re-recording command buffer for any base command buffer ID (not bake
+  // ID). This allows a quick check to see if a command should be recorded, and also to
   // fetch the command buffer to record into.
   std::map<ResourceId, VkCommandBuffer> m_RerecordCmds;
 
@@ -993,7 +993,6 @@ private:
 
   // There is only a state while currently partially replaying, it's
   // undefined/empty otherwise.
-  // All IDs are original IDs, not live.
   VulkanRenderState m_RenderState;
 
   bool InRerecordRange(ResourceId cmdid);
@@ -1152,6 +1151,8 @@ private:
   template <class T>
   T *UnwrapInfos(CaptureState state, const T *infos, uint32_t count);
 
+  VkShaderModule CreateFakeInlineShaderModule(ResourceId id, VkDevice device,
+                                              const VkShaderModuleCreateInfo *pCreateInfo);
   void PatchAttachment(VkFramebufferAttachmentImageInfo *att, VkFormat imgFormat,
                        VkSampleCountFlagBits samples);
   void PatchImageViewUsage(VkImageViewUsageCreateInfo *usage, VkFormat imgFormat,

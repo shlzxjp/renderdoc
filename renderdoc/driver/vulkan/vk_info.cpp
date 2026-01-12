@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -720,11 +720,7 @@ bool CreateDescriptorWritesForSlotData(WrappedVulkan *vk, rdcarray<VkWriteDescri
     uint32_t arrayIdx = slot - writes.back().dstArrayElement;
 
     ResourceId resId = slots[slot].resource;
-    if(rm->HasLiveResource(resId))
-      resId = rm->GetLiveID(resId);
     ResourceId sampId = slots[slot].sampler;
-    if(rm->HasLiveResource(sampId))
-      sampId = rm->GetLiveID(sampId);
 
     switch(descType)
     {
@@ -734,15 +730,15 @@ bool CreateDescriptorWritesForSlotData(WrappedVulkan *vk, rdcarray<VkWriteDescri
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       {
-        if(descType != VK_DESCRIPTOR_TYPE_SAMPLER && rm->HasCurrentResource(resId))
-          writeImage[arrayIdx].imageView = rm->GetCurrentHandle<VkImageView>(resId);
+        if(descType != VK_DESCRIPTOR_TYPE_SAMPLER && rm->HasResource(resId))
+          writeImage[arrayIdx].imageView = rm->GetHandle<VkImageView>(resId);
         else
           writeImage[arrayIdx].imageView = VK_NULL_HANDLE;
 
         if((descType == VK_DESCRIPTOR_TYPE_SAMPLER ||
             descType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
-           rm->HasCurrentResource(sampId))
-          writeImage[arrayIdx].sampler = rm->GetCurrentHandle<VkSampler>(sampId);
+           rm->HasResource(sampId))
+          writeImage[arrayIdx].sampler = rm->GetHandle<VkSampler>(sampId);
         else
           writeImage[arrayIdx].sampler = VK_NULL_HANDLE;
 
@@ -753,7 +749,7 @@ bool CreateDescriptorWritesForSlotData(WrappedVulkan *vk, rdcarray<VkWriteDescri
         // validity checking doesn't have to look them up.
         if(immutableSamplers && descType != VK_DESCRIPTOR_TYPE_SAMPLER)
         {
-          writeImage[arrayIdx].sampler = rm->GetCurrentHandle<VkSampler>(immutableSamplers[slot]);
+          writeImage[arrayIdx].sampler = rm->GetHandle<VkSampler>(immutableSamplers[slot]);
         }
 
         // set the write array (possibly redundant if we're collating as writeImage only
@@ -764,8 +760,8 @@ bool CreateDescriptorWritesForSlotData(WrappedVulkan *vk, rdcarray<VkWriteDescri
       case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
       {
-        if(rm->HasCurrentResource(resId))
-          writeTexelBuffer[arrayIdx] = rm->GetCurrentHandle<VkBufferView>(resId);
+        if(rm->HasResource(resId))
+          writeTexelBuffer[arrayIdx] = rm->GetHandle<VkBufferView>(resId);
         else
           writeTexelBuffer[arrayIdx] = VK_NULL_HANDLE;
 
@@ -777,8 +773,8 @@ bool CreateDescriptorWritesForSlotData(WrappedVulkan *vk, rdcarray<VkWriteDescri
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
       {
-        if(rm->HasCurrentResource(resId))
-          writeBuffer[arrayIdx].buffer = rm->GetCurrentHandle<VkBuffer>(resId);
+        if(rm->HasResource(resId))
+          writeBuffer[arrayIdx].buffer = rm->GetHandle<VkBuffer>(resId);
         else
           writeBuffer[arrayIdx].buffer = VK_NULL_HANDLE;
         writeBuffer[arrayIdx].offset = slots[slot].offset;
@@ -993,7 +989,7 @@ static void ProcessStaticDescriptorAccess(VulkanResourceManager *resourceMan,
     }
     else if(setLayout->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT)
     {
-      access.descriptorStore = resourceMan->GetOriginalID(setLayout->resourceId);
+      access.descriptorStore = setLayout->resourceId;
       access.byteSize = 1;
       access.byteOffset = bind.fixedBindNumber;
     }
@@ -1183,8 +1179,7 @@ void VulkanCreationInfo::ShaderObject::Init(VulkanResourceManager *resourceMan,
   for(ResourceId setLayout : descSetLayouts)
     setLayoutInfos.push_back(&info.m_DescSetLayout[setLayout]);
 
-  ProcessStaticDescriptorAccess(resourceMan, shad.refl, resourceMan->GetOriginalID(id),
-                                staticDescriptorAccess, setLayoutInfos);
+  ProcessStaticDescriptorAccess(resourceMan, shad.refl, id, staticDescriptorAccess, setLayoutInfos);
 }
 
 void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan,
@@ -1925,8 +1920,7 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan,
     setLayoutInfos.push_back(&info.m_DescSetLayout[setLayout]);
 
   for(const ShaderEntry &shad : shaders)
-    ProcessStaticDescriptorAccess(resourceMan, shad.refl, resourceMan->GetOriginalID(id),
-                                  staticDescriptorAccess, setLayoutInfos);
+    ProcessStaticDescriptorAccess(resourceMan, shad.refl, id, staticDescriptorAccess, setLayoutInfos);
 }
 
 void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, VulkanCreationInfo &info,
@@ -2061,8 +2055,7 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
     setLayoutInfos.push_back(&info.m_DescSetLayout[setLayout]);
 
   for(const ShaderEntry &shad : shaders)
-    ProcessStaticDescriptorAccess(resourceMan, shad.refl, resourceMan->GetOriginalID(id),
-                                  staticDescriptorAccess, setLayoutInfos);
+    ProcessStaticDescriptorAccess(resourceMan, shad.refl, id, staticDescriptorAccess, setLayoutInfos);
 }
 
 void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan,
@@ -2885,7 +2878,7 @@ void VulkanCreationInfo::ShaderModuleReflection::Init(VulkanResourceManager *res
     spv.MakeReflection(GraphicsAPI::Vulkan, ShaderStage(stageIndex), entryPoint, specInfo, *refl,
                        patchData);
 
-    refl->resourceId = resourceMan->GetOriginalID(id);
+    refl->resourceId = id;
   }
 }
 
@@ -2990,10 +2983,7 @@ void VulkanCreationInfo::DescSetPool::CreateOverflow(VkDevice device,
   VkResult ret = ObjDisp(device)->CreateDescriptorPool(Unwrap(device), &poolInfo, NULL, &pool);
   RDCASSERTEQUAL(ret, VK_SUCCESS);
 
-  ResourceId poolid = resourceMan->WrapResource(Unwrap(device), pool);
-
-  // register as a live-only resource, so it is cleaned up properly
-  resourceMan->AddLiveResource(poolid, pool);
+  ResourceId poolid = resourceMan->WrapResource(ResourceId(), Unwrap(device), pool);
 
   overflow.push_back(pool);
 }

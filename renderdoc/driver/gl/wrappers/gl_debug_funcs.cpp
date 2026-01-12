@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2019-2025 Baldur Karlsson
+ * Copyright (c) 2015-2026 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -136,11 +136,11 @@ bool WrappedOpenGL::Serialise_glObjectLabel(SerialiserType &ser, GLenum identifi
 
   if(IsReplayingAndReading() && Resource.name)
   {
-    ResourceId origId = GetResourceManager()->GetOriginalID(GetResourceManager()->GetResID(Resource));
+    ResourceId id = GetResourceManager()->GetResID(Resource);
 
-    GetResourceManager()->SetName(origId, Label);
+    GetResourceManager()->SetName(id, Label);
 
-    ResourceDescription &descr = GetReplay()->GetResourceDesc(origId);
+    ResourceDescription &descr = GetReplay()->GetResourceDesc(id);
     if(!Label.empty())
       descr.SetCustomName(Label);
     AddResourceCurChunk(descr);
@@ -226,8 +226,8 @@ void WrappedOpenGL::glObjectPtrLabel(const void *ptr, GLsizei length, const GLch
     USE_SCRATCH_SERIALISER();
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     ResourceId id = GetResourceManager()->GetSyncID((GLsync)ptr);
-    Serialise_glObjectLabel(ser, eGL_SYNC_FENCE, GetResourceManager()->GetCurrentResource(id).name,
-                            length, label);
+    Serialise_glObjectLabel(ser, eGL_SYNC_FENCE, GetResourceManager()->GetResource(id).name, length,
+                            label);
 
     GetResourceManager()->SetName(id, DecodeLabel(length, label));
 
