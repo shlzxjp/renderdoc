@@ -481,29 +481,91 @@ bool WrappedID3D12GraphicsCommandList::Serialise_ResourceBarrier(
         if(pBarriers[i].Type != D3D12_RESOURCE_BARRIER_TYPE_TRANSITION ||
            pBarriers[i].Transition.pResource)
         {
-          filtered.push_back(pBarriers[i]);
-
-          // unwrap it
-          D3D12_RESOURCE_BARRIER &b = filtered.back();
+          D3D12_RESOURCE_BARRIER barrier = pBarriers[i];
+          bool skipBarrier = false;
 
           ID3D12Resource *res1 = NULL, *res2 = NULL;
 
-          if(b.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
+          if(barrier.Type == D3D12_RESOURCE_BARRIER_TYPE_TRANSITION)
           {
-            res1 = b.Transition.pResource;
-            b.Transition.pResource = Unwrap(b.Transition.pResource);
+            res1 = barrier.Transition.pResource;
+            
+            // Check if the resource has the required flags for the target state
+            // This can happen when we modify resource flags during replay (e.g., removing UAV flag from BCn textures)
+            if(res1)
+            {
+              D3D12_RESOURCE_DESC desc = res1->GetDesc();
+              D3D12_RESOURCE_STATES stateBefore = barrier.Transition.StateBefore;
+              D3D12_RESOURCE_STATES stateAfter = barrier.Transition.StateAfter;
+              
+              // Check if transitioning to/from UAV state but resource doesn't have UAV flag
+              bool needsUAV = (stateAfter & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0 ||
+                              (stateBefore & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0;
+              bool hasUAV = (desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
+              
+              if(needsUAV && !hasUAV)
+              {
+                // Resource doesn't have UAV flag, skip this barrier or modify it
+                // Replace UAV state with COMMON state which is always valid
+                if((stateAfter & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0)
+                {
+                  barrier.Transition.StateAfter = (D3D12_RESOURCE_STATES)(
+                      (stateAfter & ~D3D12_RESOURCE_STATE_UNORDERED_ACCESS) | D3D12_RESOURCE_STATE_COMMON);
+                  if(barrier.Transition.StateAfter == D3D12_RESOURCE_STATE_COMMON &&
+                     barrier.Transition.StateBefore == D3D12_RESOURCE_STATE_COMMON)
+                  {
+                    skipBarrier = true;
+                  }
+                }
+                if((stateBefore & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0)
+                {
+                  barrier.Transition.StateBefore = (D3D12_RESOURCE_STATES)(
+                      (stateBefore & ~D3D12_RESOURCE_STATE_UNORDERED_ACCESS) | D3D12_RESOURCE_STATE_COMMON);
+                  if(barrier.Transition.StateAfter == D3D12_RESOURCE_STATE_COMMON &&
+                     barrier.Transition.StateBefore == D3D12_RESOURCE_STATE_COMMON)
+                  {
+                    skipBarrier = true;
+                  }
+                }
+                
+                // If both states become the same after modification, skip the barrier
+                if(barrier.Transition.StateBefore == barrier.Transition.StateAfter)
+                {
+                  skipBarrier = true;
+                }
+              }
+            }
+            
+            barrier.Transition.pResource = Unwrap(barrier.Transition.pResource);
           }
-          else if(b.Type == D3D12_RESOURCE_BARRIER_TYPE_ALIASING)
+          else if(barrier.Type == D3D12_RESOURCE_BARRIER_TYPE_ALIASING)
           {
-            res1 = b.Aliasing.pResourceBefore;
-            res2 = b.Aliasing.pResourceAfter;
-            b.Aliasing.pResourceBefore = Unwrap(b.Aliasing.pResourceBefore);
-            b.Aliasing.pResourceAfter = Unwrap(b.Aliasing.pResourceAfter);
+            res1 = barrier.Aliasing.pResourceBefore;
+            res2 = barrier.Aliasing.pResourceAfter;
+            barrier.Aliasing.pResourceBefore = Unwrap(barrier.Aliasing.pResourceBefore);
+            barrier.Aliasing.pResourceAfter = Unwrap(barrier.Aliasing.pResourceAfter);
           }
-          else if(b.Type == D3D12_RESOURCE_BARRIER_TYPE_UAV)
+          else if(barrier.Type == D3D12_RESOURCE_BARRIER_TYPE_UAV)
           {
-            res1 = b.UAV.pResource;
-            b.UAV.pResource = Unwrap(b.UAV.pResource);
+            res1 = barrier.UAV.pResource;
+            
+            // Check if the resource has UAV flag for UAV barriers
+            if(res1)
+            {
+              D3D12_RESOURCE_DESC desc = res1->GetDesc();
+              if((desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) == 0)
+              {
+                // Resource doesn't have UAV flag, skip this UAV barrier
+                skipBarrier = true;
+              }
+            }
+            
+            barrier.UAV.pResource = Unwrap(barrier.UAV.pResource);
+          }
+
+          if(!skipBarrier)
+          {
+            filtered.push_back(barrier);
           }
 
           if(IsLoading(m_State) && (res1 || res2))
