@@ -1099,7 +1099,7 @@ void WrappedOpenGL::DeleteBuffers(GLsizei n, const GLuint *buffers)
   for(GLsizei i = 0; i < n; i++)
   {
     GLResource res = BufferRes(GetCtx(), buffers[i]);
-    if(GetResourceManager()->HasCurrentResource(res))
+    if(GetResourceManager()->HasResource(res))
     {
       GLResourceRecord *record = GetResourceManager()->GetResourceRecord(res);
       if(record)

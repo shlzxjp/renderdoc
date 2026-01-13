@@ -1441,7 +1441,7 @@ bool GLResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceId i
           GLeglImageOES eglImage =
               m_Driver->CreateEGLImage(TextureState.width, TextureState.height,
                                        TextureState.internalformat, scratchBuf, scratchSize);
-          GLResource liveRes = GetLiveResource(id);
+          GLResource liveRes = GetResource(id);
 
           GLuint prevtex = 0;
           GL.glGetIntegerv(TextureBinding(TextureState.type), (GLint *)&prevtex);
@@ -2017,7 +2017,7 @@ void GLResourceManager::Apply_InitialState(GLResource res, GLInitialContents &in
         if(GL.glTextureBufferRangeEXT && (state.texBufOffs > 0 || state.texBufSize > 0))
         {
           // restore texbuffer only state
-          GL.glTextureBufferRangeEXT(live.name, eGL_TEXTURE_BUFFER, details.internalFormat, buffer,
+          GL.glTextureBufferRangeEXT(res.name, eGL_TEXTURE_BUFFER, details.internalFormat, buffer,
                                      state.texBufOffs, state.texBufSize);
         }
         else
@@ -2036,7 +2036,7 @@ void GLResourceManager::Apply_InitialState(GLResource res, GLInitialContents &in
                                       MessageSource::IncorrectAPIUse, msg);
           }
 
-          GL.glTextureBufferEXT(live.name, eGL_TEXTURE_BUFFER, details.internalFormat, buffer);
+          GL.glTextureBufferEXT(res.name, eGL_TEXTURE_BUFFER, details.internalFormat, buffer);
         }
       }
     }
@@ -2269,45 +2269,6 @@ void GLResourceManager::Apply_InitialState(GLResource res, GLInitialContents &in
         {
           GL.glTextureParameterfvEXT(res.name, details.curType, eGL_TEXTURE_MIN_LOD, &state.minLod);
           GL.glTextureParameterfvEXT(res.name, details.curType, eGL_TEXTURE_MAX_LOD, &state.maxLod);
-        }
-      }
-    }
-    else
-    {
-      GLuint buffer = state.texBuffer.name;
-
-      GLenum fmt = details.internalFormat;
-
-      if(buffer && fmt != eGL_NONE)
-      {
-        // update width from here as it's authoratitive - the texture might have been resized in
-        // multiple rebinds that we will not have serialised before.
-        details.width =
-            state.texBufSize / uint32_t(GetByteSize(1, 1, 1, GetBaseFormat(fmt), GetDataType(fmt)));
-
-        if(GL.glTextureBufferRangeEXT && (state.texBufOffs > 0 || state.texBufSize > 0))
-        {
-          // restore texbuffer only state
-          GL.glTextureBufferRangeEXT(res.name, eGL_TEXTURE_BUFFER, details.internalFormat, buffer,
-                                     state.texBufOffs, state.texBufSize);
-        }
-        else
-        {
-          uint32_t bufSize = 0;
-          GL.glGetNamedBufferParameterivEXT(buffer, eGL_BUFFER_SIZE, (GLint *)&bufSize);
-          if(state.texBufOffs > 0 || state.texBufSize > bufSize)
-          {
-            const char *msg =
-                "glTextureBufferRangeEXT is not supported on your GL implementation, but is needed "
-                "for correct replay.\n"
-                "The original capture created a texture buffer with a range - replay will use the "
-                "whole buffer, which is likely incorrect.";
-            RDCERR("%s", msg);
-            m_Driver->AddDebugMessage(MessageCategory::Resource_Manipulation, MessageSeverity::High,
-                                      MessageSource::IncorrectAPIUse, msg);
-          }
-
-          GL.glTextureBufferEXT(res.name, eGL_TEXTURE_BUFFER, details.internalFormat, buffer);
         }
       }
     }
