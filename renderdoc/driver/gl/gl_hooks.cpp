@@ -54,6 +54,7 @@ public:
   }
 
   void RegisterHooks();
+  void OptionsUpdated();
 
   void UseUnusedSupportedFunction(const char *name);
   void *GetUnsupportedFunction(const char *name);
@@ -116,12 +117,33 @@ void SetDriverForHooks(WrappedOpenGL *driver)
 
 void EnableGLHooks()
 {
+  // Check if OpenGL capture is disabled via capture options
+  if(RenderDoc::Inst().GetCaptureOptions().disableOpenGLCapture)
+  {
+    RDCLOG("OpenGL capture disabled by --disable-opengl option, not enabling GL hooks");
+    return;
+  }
+  RDCLOG("Enabling OpenGL hooks");
   glhook.enabled = true;
 }
 
 void DisableGLHooks()
 {
+  RDCLOG("Disabling OpenGL hooks");
   glhook.enabled = false;
+}
+
+void GLHook::OptionsUpdated()
+{
+  // If OpenGL capture is disabled, disable the hooks
+  if(RenderDoc::Inst().GetCaptureOptions().disableOpenGLCapture)
+  {
+    if(glhook.enabled)
+    {
+      RDCLOG("GLHook::OptionsUpdated - Disabling OpenGL hooks due to --disable-opengl option");
+      glhook.enabled = false;
+    }
+  }
 }
 
 template <typename ret_type>

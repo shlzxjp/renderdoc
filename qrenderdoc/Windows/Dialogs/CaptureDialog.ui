@@ -530,6 +530,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="DisableOpenGLCapture">
+        <property name="toolTip">
+         <string>When enabled, disable OpenGL/OpenGL ES capture. Useful when an application uses both OpenGL and another API (e.g. D3D12) with texture sharing, and you only want to capture the other API.</string>
+        </property>
+        <property name="text">
+         <string>Disable OpenGL Capture</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QFrame" name="SoftMemoryLimitFrame">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
