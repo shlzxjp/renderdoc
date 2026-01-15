@@ -228,6 +228,16 @@ typedef enum RENDERDOC_CaptureOption
   //
   // Default - 0 Megabytes
   eRENDERDOC_Option_SoftMemoryLimit = 13,
+
+  // Disable OpenGL/OpenGL ES capture. Useful when an application uses both
+  // OpenGL and another API (e.g. D3D12) with texture sharing, and you only
+  // want to capture the other API.
+  //
+  // Default - disabled (OpenGL capture is enabled)
+  //
+  // 1 - OpenGL capture is disabled, hooks will passthrough to real functions
+  // 0 - OpenGL capture is enabled as normal
+  eRENDERDOC_Option_DisableOpenGLCapture = 14,
 } RENDERDOC_CaptureOption;
 
 // Sets an option that controls how RenderDoc behaves on capture.

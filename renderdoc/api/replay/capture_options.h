@@ -246,6 +246,19 @@ Default - 0 Megabytes
 :type: int
 )");
   uint32_t softMemoryLimit;
+
+  DOCUMENT(R"(Disable OpenGL/OpenGL ES capture. Useful when an application uses both
+OpenGL and another API (e.g. D3D12) with texture sharing, and you only want to capture the other API.
+
+Default - disabled (OpenGL capture is enabled)
+
+``True`` - OpenGL capture is disabled, hooks will passthrough to real functions.
+
+``False`` - OpenGL capture is enabled as normal.
+
+:type: bool
+)");
+  bool disableOpenGLCapture;
 };
 
 DECLARE_REFLECTION_STRUCT(CaptureOptions);

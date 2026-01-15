@@ -31,6 +31,7 @@ class WGLHook : LibraryHook
 public:
   WGLHook() : driver(GetGLPlatform()) {}
   void RegisterHooks();
+  void OptionsUpdated();
 
   WrappedOpenGL driver;
 
@@ -42,6 +43,9 @@ public:
   // when we have loaded EGL try to completely disable all WGL hooks, to avoid clashing with EGL
   // when fetching dispatch tables or hooking.
   bool eglDisabled = false;
+
+  // when OpenGL capture is disabled via capture options, we also disable WGL hooks
+  bool openglDisabled = false;
 
   // we use this to check if we've seen a context be created. If we HAVEN'T then RenderDoc was
   // probably injected after the start of the application so we should not call our hooked functions
@@ -57,6 +61,20 @@ public:
   void PopulateFromContext(HDC dc, HGLRC rc);
   GLInitParams GetInitParamsForDC(HDC dc);
 } wglhook;
+
+void WGLHook::OptionsUpdated()
+{
+  // If OpenGL capture is disabled, disable WGL hooks as well
+  if(RenderDoc::Inst().GetCaptureOptions().disableOpenGLCapture)
+  {
+    if(!openglDisabled)
+    {
+      RDCLOG("WGLHook::OptionsUpdated - Disabling WGL hooks due to --disable-opengl option");
+      openglDisabled = true;
+      DisableGLHooks();
+    }
+  }
+}
 
 void DisableWGLHooksForEGL()
 {
@@ -176,7 +194,7 @@ void WGLHook::RefreshWindowParameters(const GLWindowingData &data)
 
 void WGLHook::ProcessSwapBuffers(GLChunk src, HDC dc)
 {
-  if(eglDisabled)
+  if(eglDisabled || openglDisabled)
     return;
 
   HWND w = WindowFromDC(dc);
@@ -237,7 +255,7 @@ static HGLRC WINAPI wglCreateContext_hooked(HDC dc)
 {
   SCOPED_LOCK(glLock);
 
-  if(wglhook.createRecurse || wglhook.eglDisabled)
+  if(wglhook.createRecurse || wglhook.eglDisabled || wglhook.openglDisabled)
     return WGL.wglCreateContext(dc);
 
   wglhook.createRecurse = true;
@@ -271,7 +289,7 @@ static BOOL WINAPI wglDeleteContext_hooked(HGLRC rc)
 {
   SCOPED_LOCK(glLock);
 
-  if(wglhook.haveContextCreation && !wglhook.eglDisabled)
+  if(wglhook.haveContextCreation && !wglhook.eglDisabled && !wglhook.openglDisabled)
   {
     SCOPED_LOCK(glLock);
     wglhook.driver.DeleteContext(rc);
@@ -287,7 +305,7 @@ static HGLRC WINAPI wglCreateLayerContext_hooked(HDC dc, int iLayerPlane)
 {
   SCOPED_LOCK(glLock);
 
-  if(wglhook.createRecurse || wglhook.eglDisabled)
+  if(wglhook.createRecurse || wglhook.eglDisabled || wglhook.openglDisabled)
     return WGL.wglCreateLayerContext(dc, iLayerPlane);
 
   wglhook.createRecurse = true;
@@ -325,7 +343,7 @@ static HGLRC WINAPI wglCreateContextAttribsARB_hooked(HDC dc, HGLRC hShareContex
   SCOPED_LOCK(glLock);
 
   // don't recurse
-  if(wglhook.createRecurse || wglhook.eglDisabled)
+  if(wglhook.createRecurse || wglhook.eglDisabled || wglhook.openglDisabled)
     return WGL.wglCreateContextAttribsARB(dc, hShareContext, attribList);
 
   wglhook.createRecurse = true;
@@ -435,7 +453,7 @@ static BOOL WINAPI wglShareLists_hooked(HGLRC oldContext, HGLRC newContext)
 
   DWORD err = GetLastError();
 
-  if(ret && !wglhook.eglDisabled)
+  if(ret && !wglhook.eglDisabled && !wglhook.openglDisabled)
   {
     SCOPED_LOCK(glLock);
 
@@ -455,7 +473,7 @@ static BOOL WINAPI wglMakeCurrent_hooked(HDC dc, HGLRC rc)
 
   DWORD err = GetLastError();
 
-  if(ret && !wglhook.eglDisabled)
+  if(ret && !wglhook.eglDisabled && !wglhook.openglDisabled)
   {
     wglhook.ProcessContextActivate(rc, dc);
   }
@@ -473,7 +491,7 @@ static BOOL WINAPI wglMakeContextCurrentARB_hooked(HDC drawDC, HDC readDC, HGLRC
 
   DWORD err = GetLastError();
 
-  if(ret && !wglhook.eglDisabled)
+  if(ret && !wglhook.eglDisabled && !wglhook.openglDisabled)
   {
     wglhook.ProcessContextActivate(rc, drawDC);
   }
@@ -538,7 +556,7 @@ static BOOL WINAPI wglSwapMultipleBuffers_hooked(UINT numSwaps, CONST WGLSWAP *p
 
 static LONG WINAPI ChangeDisplaySettingsA_hooked(DEVMODEA *mode, DWORD flags)
 {
-  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled ||
+  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled || wglhook.openglDisabled ||
      RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     return WGL.ChangeDisplaySettingsA(mode, flags);
 
@@ -547,7 +565,7 @@ static LONG WINAPI ChangeDisplaySettingsA_hooked(DEVMODEA *mode, DWORD flags)
 
 static LONG WINAPI ChangeDisplaySettingsW_hooked(DEVMODEW *mode, DWORD flags)
 {
-  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled ||
+  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled || wglhook.openglDisabled ||
      RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     return WGL.ChangeDisplaySettingsW(mode, flags);
 
@@ -557,7 +575,7 @@ static LONG WINAPI ChangeDisplaySettingsW_hooked(DEVMODEW *mode, DWORD flags)
 static LONG WINAPI ChangeDisplaySettingsExA_hooked(LPCSTR devname, DEVMODEA *mode, HWND wnd,
                                                    DWORD flags, LPVOID param)
 {
-  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled ||
+  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled || wglhook.openglDisabled ||
      RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     return WGL.ChangeDisplaySettingsExA(devname, mode, wnd, flags, param);
 
@@ -567,7 +585,7 @@ static LONG WINAPI ChangeDisplaySettingsExA_hooked(LPCSTR devname, DEVMODEA *mod
 static LONG WINAPI ChangeDisplaySettingsExW_hooked(LPCWSTR devname, DEVMODEW *mode, HWND wnd,
                                                    DWORD flags, LPVOID param)
 {
-  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled ||
+  if((flags & CDS_FULLSCREEN) == 0 || wglhook.eglDisabled || wglhook.openglDisabled ||
      RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     return WGL.ChangeDisplaySettingsExW(devname, mode, wnd, flags, param);
 
@@ -592,7 +610,7 @@ static PROC WINAPI wglGetProcAddress_hooked(const char *func)
     realFunc = WGL.wglGetProcAddress(func);
   }
 
-  if(wglhook.eglDisabled)
+  if(wglhook.eglDisabled || wglhook.openglDisabled)
     return realFunc;
 
   // if the real context doesn't support this function, and we don't provide an implementation fully
