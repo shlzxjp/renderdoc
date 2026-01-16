@@ -200,10 +200,14 @@ static uint32_t LaunchReplayUI(uint32_t connectTargetControl, const char *cmdlin
   if(replayapp.empty())
     return 0;
 
-  rdcstr cmd = cmdline ? cmdline : "";
+  rdcstr cmd;
+  // When connectTargetControl is set, ignore cmdline file path to prevent auto-opening capture.
+  // User can manually open captures from the LiveCapture window.
   if(connectTargetControl)
-    cmd += StringFormat::Fmt(" --targetcontrol localhost:%u",
-                             RenderDoc::Inst().GetTargetControlIdent());
+    cmd = StringFormat::Fmt("--targetcontrol localhost:%u",
+                            RenderDoc::Inst().GetTargetControlIdent());
+  else
+    cmd = cmdline ? cmdline : "";
 
   return Process::LaunchProcess(replayapp, "", cmd, false);
 }

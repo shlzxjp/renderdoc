@@ -197,7 +197,7 @@ CaptureOptions::CaptureOptions()
   captureAllCmdLists = false;
   debugOutputMute = true;
   softMemoryLimit = 0;
-  disableOpenGLCapture = false;
+  disableOpenGLCapture = true;
 }
 
 #if ENABLED(ENABLE_UNIT_TESTS)

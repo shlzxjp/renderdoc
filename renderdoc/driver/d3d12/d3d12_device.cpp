@@ -2939,18 +2939,12 @@ bool WrappedID3D12Device::EndFrameCapture(DeviceOwnedWindow devWnd)
 
   rdcarray<WrappedID3D12CommandQueue *> queues;
 
-  rdcarray<ID3D12Resource *> refBuffers;
-  rdcarray<WrappedID3D12CommandQueue *> refQueues;
-
   // transition back to IDLE and readback initial states atomically
   {
     SCOPED_WRITELOCK(m_CapTransitionLock);
     EndCaptureFrame();
 
     queues = m_Queues;
-
-    refBuffers.swap(m_RefBuffers);
-    refQueues.swap(m_RefQueues);
 
     bool ContainsExecuteIndirect = false;
 
@@ -2969,6 +2963,18 @@ bool WrappedID3D12Device::EndFrameCapture(DeviceOwnedWindow devWnd)
     m_State = CaptureState::BackgroundCapturing;
 
     DeviceWaitForIdle();
+
+    // Release refQueues and refBuffers inside the lock to prevent race condition
+    // where the application might destroy resources between lock release and Release() call
+    for(WrappedID3D12CommandQueue *q : m_RefQueues)
+      if(q)
+        q->Release();
+    m_RefQueues.clear();
+
+    for(ID3D12Resource *r : m_RefBuffers)
+      if(r)
+        r->Release();
+    m_RefBuffers.clear();
   }
 
   rdcarray<MapState> maps = GetMaps();
@@ -3281,13 +3287,6 @@ bool WrappedID3D12Device::EndFrameCapture(DeviceOwnedWindow devWnd)
   for(auto it = queues.begin(); it != queues.end(); ++it)
     (*it)->ClearAfterCapture();
 
-  // remove the references held during capture, potentially releasing the queue/buffer.
-  for(WrappedID3D12CommandQueue *q : refQueues)
-    q->Release();
-
-  for(ID3D12Resource *r : refBuffers)
-    r->Release();
-
   for(ID3D12Heap *h : m_InitialStateHeaps)
     h->Release();
   m_InitialStateHeaps.clear();
@@ -3328,10 +3327,14 @@ bool WrappedID3D12Device::DiscardFrameCapture(DeviceOwnedWindow devWnd)
 
     // remove the reference held during capture, potentially releasing the queue.
     for(WrappedID3D12CommandQueue *q : m_RefQueues)
-      q->Release();
+      if(q)
+        q->Release();
+    m_RefQueues.clear();
 
     for(ID3D12Resource *r : m_RefBuffers)
-      r->Release();
+      if(r)
+        r->Release();
+    m_RefBuffers.clear();
   }
 
   rdcarray<MapState> maps = GetMaps();
