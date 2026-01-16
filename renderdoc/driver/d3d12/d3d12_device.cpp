@@ -2901,6 +2901,17 @@ bool WrappedID3D12Device::EndFrameCapture(DeviceOwnedWindow devWnd)
   if(!IsActiveCapturing(m_State))
     return true;
 
+  // If this is an app-controlled capture (e.g., from UE's RenderDoc plugin via StartFrameCapture/EndFrameCapture),
+  // defer the actual capture end to the next Present call. This ensures we capture a complete frame
+  // (Present-to-Present) rather than just the commands between StartFrameCapture and EndFrameCapture.
+  // This makes the capture result consistent with TriggerCapture (used by RenderDoc UI button).
+  if(m_AppControlledCapture)
+  {
+    RDCLOG("Deferring EndFrameCapture to next Present for complete frame capture");
+    m_AppControlledCapture = false;
+    return true;
+  }
+
   IDXGISwapper *swapper = NULL;
   SwapPresentInfo swapInfo = {};
 
