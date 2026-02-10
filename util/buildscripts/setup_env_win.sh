@@ -67,16 +67,50 @@ fi
 # ============================================================
 # 5. Python 配置（RenderDoc 需要 Python 3.6）
 # ============================================================
-export PATH="/c/Users/domrjchen/AppData/Local/Programs/Python/Python36:$PATH"
-export PATH="/c/Users/domrjchen/AppData/Local/Programs/Python/Python36/Scripts:$PATH"
-echo "Python 3.6 路径: /c/Users/domrjchen/AppData/Local/Programs/Python/Python36"
+# 动态获取当前用户名（从 MSYS2 继承的 Windows 环境变量中获取）
+WIN_USERNAME="${USERNAME:-${USER:-}}"
+if [ -z "$WIN_USERNAME" ]; then
+    WIN_USERNAME=$(whoami | sed 's/.*\\//')
+fi
+if [ -z "$WIN_USERNAME" ]; then
+    echo "错误: 无法获取当前 Windows 用户名，请手动配置 Python 和 Android SDK 路径"
+fi
+
+PYTHON36_PATH="/c/Users/$WIN_USERNAME/AppData/Local/Programs/Python/Python36"
+if [ -d "$PYTHON36_PATH" ]; then
+    export PATH="$PYTHON36_PATH:$PATH"
+    export PATH="$PYTHON36_PATH/Scripts:$PATH"
+    echo "Python 3.6 路径: $PYTHON36_PATH"
+else
+    echo "警告: 未找到 Python 3.6，路径不存在: $PYTHON36_PATH"
+    echo "  请确保已安装 Python 3.6 到默认位置，或手动设置 PATH"
+fi
 
 # ============================================================
 # 6. Android SDK/NDK 配置（用于 Android 支持）
 # ============================================================
-# Android SDK 和 NDK 配置
-export ANDROID_SDK="/c/Users/domrjchen/AppData/Local/Android/Sdk"
-export ANDROID_NDK="/c/Users/domrjchen/AppData/Local/Android/Sdk/ndk/16.1.4479499"
+# Android SDK 和 NDK 配置（动态获取用户路径）
+ANDROID_SDK_PATH="/c/Users/$WIN_USERNAME/AppData/Local/Android/Sdk"
+if [ -d "$ANDROID_SDK_PATH" ]; then
+    export ANDROID_SDK="$ANDROID_SDK_PATH"
+    echo "Android SDK 路径: $ANDROID_SDK"
+else
+    echo "警告: 未找到 Android SDK，路径不存在: $ANDROID_SDK_PATH"
+    echo "  请确保已安装 Android SDK，或手动设置 ANDROID_SDK 环境变量"
+fi
+
+# NDK 必须使用 16.1.4479499 版本，其他版本会导致编译问题
+REQUIRED_NDK_VERSION="16.1.4479499"
+ANDROID_NDK_PATH="$ANDROID_SDK_PATH/ndk/$REQUIRED_NDK_VERSION"
+if [ -d "$ANDROID_NDK_PATH" ]; then
+    export ANDROID_NDK="$ANDROID_NDK_PATH"
+    echo "Android NDK 路径: $ANDROID_NDK"
+else
+    echo "错误: 未找到指定版本的 Android NDK，路径不存在: $ANDROID_NDK_PATH"
+    echo "  RenderDoc 必须使用 NDK $REQUIRED_NDK_VERSION，其他版本会导致编译问题"
+    echo "  请通过 SDK Manager 安装该版本: sdkmanager \"ndk;$REQUIRED_NDK_VERSION\""
+fi
+
 export ANDROID_NDK_HOME="$ANDROID_NDK"
 export ANDROID_NDK_ROOT="$ANDROID_NDK"
 export NDK_HOME="$ANDROID_NDK"
